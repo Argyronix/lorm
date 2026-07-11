@@ -100,9 +100,11 @@ python3 skills/lorm/scripts/validate_policy.py lorm-policy.yaml
   in [`docs/hard-enforcement.md`](docs/hard-enforcement.md).
 - MCP tools are gated since 2.2.0 (schema 1.2 `tool_patterns` /
   `input_patterns`).
-- Next: trust-lifecycle tooling (audit-log analyzer proposing
-  promotions/demotions), executable `conditions[].check` commands,
-  project-level classifier extensions.
+- Trust-lifecycle tooling since 2.3.0: `/lorm:lorm-review` analyzes the
+  audit log and drafts promotion/demotion transitions for human decision —
+  see [`docs/trust-lifecycle.md`](docs/trust-lifecycle.md).
+- Next: executable `conditions[].check` commands, project-level classifier
+  extensions.
 
 ## License
 

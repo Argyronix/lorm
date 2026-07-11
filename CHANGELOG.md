@@ -3,6 +3,23 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.3.0 — 2026-07-11
+
+Trust-lifecycle tooling — the SPEC §6 promotion/demotion lifecycle made
+operational.
+
+### Added
+- `skills/lorm/scripts/lorm_review.py`: deterministic audit-log analyzer.
+  Joins execution and verification records; reports promotion candidates
+  (with draft L5 policy entries: track record, canary expiry, derived rate
+  limit, DRAFT placeholders for author/approver), demotion proposals on
+  failed verifications, policy-expiry warnings, and hygiene findings
+  (verification coverage too low to promote — I-7 applied to tooling).
+- `/lorm:lorm-review` plugin command: runs the analyzer and presents
+  drafts as human-reviewable diffs; I-8 forbids self-applying them.
+- `docs/trust-lifecycle.md`.
+- 9 new tests (65 total).
+
 ## 2.2.0 — 2026-07-11
 
 MCP tool coverage.

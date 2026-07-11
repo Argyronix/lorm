@@ -515,6 +515,113 @@ def test_mcp():
         shutil.rmtree(x)
 
 
+REVIEW = os.path.join(REPO, "skills", "lorm", "scripts", "lorm_review.py")
+
+
+def run_review(project, *extra):
+    proc = subprocess.run(
+        [sys.executable, REVIEW, project, "--json", *extra],
+        capture_output=True, text=True, timeout=30)
+    return json.loads(proc.stdout) if proc.stdout.strip() else {}
+
+
+def seed_records(project, records):
+    os.makedirs(os.path.join(project, ".lorm"), exist_ok=True)
+    with open(os.path.join(project, ".lorm", "audit.jsonl"), "a") as fh:
+        for rec in records:
+            fh.write(json.dumps(rec) + "\n")
+
+
+def ts_ago(**kw):
+    return (datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(**kw)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def exec_rec(cap, ts, verified="pending", level="L4"):
+    return {"timestamp": ts, "capability": cap, "level": level,
+            "authorizer": "human:session t", "action": f"do {cap}",
+            "params": {}, "diagnosis_ref": "t", "outcome": "ok",
+            "verified": verified}
+
+
+def test_review():
+    print("trust-lifecycle review")
+    # promotion candidate: 12 verified L4 executions, 0 failures
+    p = make_project(L4_ENTRY)
+    seed_records(p, [exec_rec("db.index.create", ts_ago(days=i + 1),
+                              verified="verified") for i in range(12)])
+    out = run_review(p)
+    promos = out["findings"]["promotions"]
+    check("12 verified -> promotion candidate",
+          len(promos) == 1 and promos[0]["capability"] == "db.index.create",
+          str(promos))
+    check("draft has placeholders + inherited match/bounds",
+          "DRAFT" in promos[0]["draft"]["policy"]["author"]
+          and promos[0]["draft"]["match"].get("command_patterns"),
+          str(promos[0]["draft"]))
+
+    # below track threshold -> no proposal
+    out = run_review(p, "--min-track", "20")
+    check("track below threshold -> no promotion",
+          not out["findings"]["promotions"], str(out["findings"]))
+
+    # demotion: failed verification, no active demotion
+    p2 = make_project(BASE_L5)
+    seed_records(p2, [
+        exec_rec("fs.cleanup.build", ts_ago(days=2), verified="verified",
+                 level="L5"),
+        exec_rec("fs.cleanup.build", ts_ago(days=1), verified="failed",
+                 level="L5"),
+    ])
+    out = run_review(p2)
+    dems = out["findings"]["demotions"]
+    check("failed verification -> demotion proposal L5->L4",
+          len(dems) == 1 and dems[0]["draft"]["to"] == "L4", str(dems))
+    check("failing capability is not a promotion candidate",
+          not out["findings"]["promotions"], "")
+
+    # verification record joining: pending execution + skill verification
+    p3 = make_project(L4_ENTRY)
+    t = ts_ago(days=1)
+    seed_records(p3, [exec_rec("db.index.create", t)])
+    seed_records(p3, [{"timestamp": ts_ago(hours=23), "capability":
+                       "db.index.create", "verified": "verified",
+                       "x-verifies": t, "x-writer": "lorm-skill"}])
+    out = run_review(p3)
+    check("verification record joins execution",
+          out["stats"]["db.index.create"]["verified"] == 1
+          and out["stats"]["db.index.create"]["pending"] == 0,
+          str(out["stats"]))
+
+    # low verification coverage -> hygiene, not promotion
+    p4 = make_project(L4_ENTRY)
+    seed_records(p4, [exec_rec("db.index.create", ts_ago(days=i + 1))
+                      for i in range(12)])
+    out = run_review(p4)
+    check("pending-heavy history -> hygiene finding, no promotion",
+          not out["findings"]["promotions"]
+          and any("coverage" in h["issue"] for h in out["findings"]["hygiene"]),
+          str(out["findings"]))
+
+    # expiry warning
+    soon = (datetime.date.today() + datetime.timedelta(days=5)).isoformat()
+    p5 = make_project(BASE_L5.replace(f"expires: {FUTURE}", f"expires: {soon}"))
+    out = run_review(p5)
+    check("policy expiring soon -> expiry warning",
+          any("expires in" in e["status"] for e in out["findings"]["expiry"]),
+          str(out["findings"]["expiry"]))
+
+    # old records outside window are ignored
+    p6 = make_project(L4_ENTRY)
+    seed_records(p6, [exec_rec("db.index.create", ts_ago(days=200),
+                               verified="verified") for _ in range(12)])
+    out = run_review(p6, "--window", "90")
+    check("records outside window ignored", not out["stats"], str(out["stats"]))
+
+    for x in (p, p2, p3, p4, p5, p6):
+        shutil.rmtree(x)
+
+
 def test_multi_cap():
     print("multiple capabilities on one command")
     two = BASE_L5 + f"""\
@@ -533,7 +640,7 @@ def main():
     for fn in (test_passive, test_l5_allow_and_degrades, test_rate_limit,
                test_l4_l3_and_defaults, test_compound_and_wrappers,
                test_write_paths, test_self_protection, test_fail_closed,
-               test_post_audit, test_mcp, test_multi_cap):
+               test_post_audit, test_mcp, test_review, test_multi_cap):
         fn()
     print(f"\n{PASS} passed, {len(FAIL)} failed")
     if FAIL:
