@@ -6,6 +6,6 @@
     "name": "Argyronix",
     "email": "edwardfish@argyronix.com"
   },
-  "homepage": "https://github.com/argyronix/lorm",
+  "homepage": "https://github.com/Argyronix/lorm",
   "hooks": "./hooks/hooks.json"
 }

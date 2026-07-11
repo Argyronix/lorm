@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/argyronix/lorm/schema/lorm-policy.schema.json",
+  "$id": "https://github.com/Argyronix/lorm/schema/lorm-policy.schema.json",
   "title": "LORM Policy",
   "description": "Machine-readable LORM policy document (SPEC.md §13). Conventionally stored as lorm-policy.yaml at the project root or .lorm/policy.yaml.",
   "type": "object",

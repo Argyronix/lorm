@@ -20,8 +20,8 @@ call:
 # local (development)
 claude --plugin-dir /path/to/lorm
 
-# from GitHub (once published)
-/plugin marketplace add argyronix/lorm
+# from GitHub
+/plugin marketplace add Argyronix/lorm
 /plugin install lorm@argyronix-lorm
 ```
 

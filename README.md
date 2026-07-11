@@ -47,9 +47,9 @@ and §6 (trust lifecycle) are the core.
 
 ```bash
 claude --plugin-dir /path/to/lorm        # local
-# or, once published on GitHub:
-#   /plugin marketplace add argyronix/lorm
-#   /plugin install lorm@argyronix-lorm
+# or from GitHub:
+/plugin marketplace add Argyronix/lorm
+/plugin install lorm@argyronix-lorm
 ```
 
 …or just the skill, copied into one project (soft layer only):
