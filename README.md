@@ -30,6 +30,7 @@ agent skill (soft layer) and enforcement hooks (hard layer).
 
 | Path | What it is |
 | --- | --- |
+| [`docs/user-guide.md`](docs/user-guide.md) | **Start here** — plain-language guide: scenarios, example configs, FAQ |
 | [`SPEC.md`](SPEC.md) | The normative specification (RFC 2119 language) |
 | [`RATIONALE.md`](RATIONALE.md) | Why the model exists — the non-normative argument |
 | [`docs/related-work.md`](docs/related-work.md) | Positioning vs. Parasuraman–Sheridan–Wickens, SAE J3016, TM Forum Autonomous Networks, IBM autonomic computing |
@@ -40,8 +41,9 @@ agent skill (soft layer) and enforcement hooks (hard layer).
 
 ## Quick start
 
-**1. Read the spec.** [`SPEC.md`](SPEC.md) — §2 (levels), §5 (invariants),
-and §6 (trust lifecycle) are the core.
+**1. Read.** New to LORM? Start with the
+[user guide](docs/user-guide.md). For the normative core, read
+[`SPEC.md`](SPEC.md) — §2 (levels), §5 (invariants), §6 (trust lifecycle).
 
 **2. Install** — either the full plugin (recommended: skill + hooks):
 
