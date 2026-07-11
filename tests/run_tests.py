@@ -515,6 +515,72 @@ def test_mcp():
         shutil.rmtree(x)
 
 
+def with_conditions(conds_yaml):
+    """BASE_L5 with a conditions block injected into fs.cleanup.build."""
+    return BASE_L5.replace("    rollback:", conds_yaml + "    rollback:")
+
+
+def test_executable_conditions():
+    print("executable conditions (schema 1.3)")
+    passing = with_conditions(
+        "    conditions:\n"
+        "      - text: \"build dir exists\"\n"
+        "        check: \"test -d build\"\n")
+    p = make_project(passing)
+    rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p), p)
+    check("passing check -> allow with check note",
+          d == "allow" and "1 condition check(s) passed" in r, f"{d} {r}")
+
+    failing = with_conditions(
+        "    conditions:\n"
+        "      - text: \"deploy lock absent\"\n"
+        "        check: \"test ! -f deploy.lock\"\n")
+    p2 = make_project(failing)
+    open(os.path.join(p2, "deploy.lock"), "w").write("busy")
+    rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p2), p2)
+    check("failing check -> ask naming the condition",
+          d == "ask" and "deploy lock absent" in r, f"{d} {r}")
+
+    timing_out = with_conditions(
+        "    conditions:\n"
+        "      - text: \"slow probe\"\n"
+        "        check: \"sleep 30\"\n"
+        "        timeout: 1\n")
+    p3 = make_project(timing_out)
+    rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p3), p3)
+    check("check timeout -> ask", d == "ask" and "timed out" in r, f"{d} {r}")
+
+    mixed = with_conditions(
+        "    conditions:\n"
+        "      - text: \"build dir exists\"\n"
+        "        check: \"test -d build\"\n"
+        "      - \"no other maintenance running\"\n")
+    p4 = make_project(mixed)
+    rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p4), p4)
+    check("mixed -> allow noting both kinds",
+          d == "allow" and "1 condition check(s) passed" in r
+          and "1 condition(s) remain agent-verified" in r, f"{d} {r}")
+
+    soft_only = with_conditions(
+        "    conditions:\n"
+        "      - \"no other maintenance running\"\n")
+    p5 = make_project(soft_only)
+    rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p5), p5)
+    check("string-only conditions -> allow, agent-verified note",
+          d == "allow" and "agent-verified (soft)" in r, f"{d} {r}")
+
+    env_check = with_conditions(
+        "    conditions:\n"
+        "      - text: \"env vars provided\"\n"
+        "        check: \"test \\\"$LORM_CAPABILITY\\\" = fs.cleanup.build"
+        " -a -n \\\"$LORM_ACTION\\\"\"\n")
+    p6 = make_project(env_check)
+    rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p6), p6)
+    check("check sees LORM_* env vars", d == "allow", f"{d} {r}")
+    for x in (p, p2, p3, p4, p5, p6):
+        shutil.rmtree(x)
+
+
 REVIEW = os.path.join(REPO, "skills", "lorm", "scripts", "lorm_review.py")
 
 
@@ -640,7 +706,8 @@ def main():
     for fn in (test_passive, test_l5_allow_and_degrades, test_rate_limit,
                test_l4_l3_and_defaults, test_compound_and_wrappers,
                test_write_paths, test_self_protection, test_fail_closed,
-               test_post_audit, test_mcp, test_review, test_multi_cap):
+               test_post_audit, test_mcp, test_executable_conditions,
+               test_review, test_multi_cap):
         fn()
     print(f"\n{PASS} passed, {len(FAIL)} failed")
     if FAIL:

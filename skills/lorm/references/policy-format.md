@@ -37,7 +37,7 @@ recommend but not execute without asking) and follow `unknown_action`:
 | 1 | entry matches action class and has `level: L5` | not L5 — use the entry's own level |
 | 2 | `policy.expires` is a future date | **expired → treat as L4** (SPEC 13-1); name the expiry date |
 | 3 | capability is NOT in `demotions[]` | demoted → operate at the demotion's `to` level; name the recorded reason |
-| 4 | every `conditions[]` string holds against real, current state | can't establish a condition → degrade to L4, name the condition |
+| 4 | every `conditions[]` entry holds against real, current state | can't establish a condition → degrade to L4, name the condition. Entries with a `check` command (schema 1.3) are verified by the enforcement hook when it is active — your duty is the plain-string ones; without the hook, evaluate `check` entries yourself (run the command) |
 | 5 | action within `bounds.targets` (glob) and `blast_radius`, incl. rate limits | out of bounds → refuse auto-execution, escalate to L4 |
 
 **Rate-limit check (13-3):** read the audit log (`audit.log`), count records

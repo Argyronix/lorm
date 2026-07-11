@@ -25,7 +25,9 @@ import fnmatch
 import json
 import os
 import shlex
+import subprocess
 import sys
+import time
 
 GATED_TOOLS = {"Bash", "Write", "Edit"}
 
@@ -45,6 +47,8 @@ REDIRECT_TOKENS = {">", ">>"}
 WRAPPER_COMMANDS = {"sudo", "doas", "env", "command", "nohup", "time", "exec"}
 DESTRUCTIVE_FILE_COMMANDS = {"rm", "mv", "shred", "truncate", "sed", "tee", "cp", "dd"}
 RATE_WINDOW_SECONDS = 3600
+CONDITION_TIMEOUT_DEFAULT = 5
+CONDITIONS_BUDGET_SECONDS = 8.0  # keep total below the 10s hook timeout
 SEVERITY = {"deny": 3, "ask": 2, "allow": 1}
 LEVELS = ("L0", "L1", "L2", "L3", "L4", "L5")
 
@@ -466,6 +470,53 @@ def self_protection(tool, tool_input, segments, cwd, project_root, policy_path, 
     return None
 
 
+# --------------------------------------------------------------- conditions
+
+
+def evaluate_conditions(cap, tool, tool_input, project_root):
+    """Run executable condition checks (schema 1.3).
+
+    Returns (failure_reason_or_None, checked_count, soft_count). A check
+    passes iff its command exits 0; non-zero, timeout, or an exhausted
+    overall budget degrade the action (caller emits 'ask'). Plain-string
+    conditions stay agent-verified (soft)."""
+    checked = soft = 0
+    started = time.monotonic()
+    for cond in cap.get("conditions") or []:
+        if not (isinstance(cond, dict) and cond.get("check")):
+            soft += 1
+            continue
+        text = cond.get("text") or cond["check"]
+        remaining = CONDITIONS_BUDGET_SECONDS - (time.monotonic() - started)
+        if remaining <= 0:
+            return (f"conditions time budget exhausted before checking "
+                    f"'{text}'", checked, soft)
+        timeout = min(int(cond.get("timeout") or CONDITION_TIMEOUT_DEFAULT),
+                      max(1, int(remaining)))
+        env = dict(os.environ,
+                   LORM_CAPABILITY=cap.get("id", ""),
+                   LORM_TOOL_NAME=tool,
+                   LORM_ACTION=summarize_action(tool, tool_input),
+                   CLAUDE_PROJECT_DIR=project_root)
+        try:
+            proc = subprocess.run(cond["check"], shell=True, cwd=project_root,
+                                  capture_output=True, text=True,
+                                  timeout=timeout, env=env)
+        except subprocess.TimeoutExpired:
+            return (f"condition check timed out after {timeout}s: '{text}'",
+                    checked, soft)
+        except OSError as exc:
+            return (f"condition check could not run ({exc}): '{text}'",
+                    checked, soft)
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+            suffix = f" — {detail[0][:80]}" if detail else ""
+            return (f"condition not met: '{text}' (check exit "
+                    f"{proc.returncode}{suffix})", checked, soft)
+        checked += 1
+    return None, checked, soft
+
+
 # ---------------------------------------------------------------- decisions
 
 
@@ -518,11 +569,25 @@ def decide_for_capability(cap, policy, tool, tool_input, cap_segments,
                            f"({count}/{max_per_hour} this hour) — degrading to L4")
         rate_note = f"; rate {count}/{max_per_hour} this hour"
 
+    failure, checked, soft = evaluate_conditions(cap, tool, tool_input,
+                                                 project_root)
+    if failure:
+        return ("ask", f"LORM: `{cid}` L5 entry valid but {failure} — "
+                       "degrading to L4 (SPEC 13-1)")
+    if checked and soft:
+        cond_note = (f"; {checked} condition check(s) passed, "
+                     f"{soft} condition(s) remain agent-verified")
+    elif checked:
+        cond_note = f"; {checked} condition check(s) passed"
+    elif soft:
+        cond_note = "; conditions[] remain agent-verified (soft)"
+    else:
+        cond_note = ""
+
     pol = cap.get("policy") or {}
     return ("allow",
             f"LORM: authorized by policy `{cid}` v{pol.get('version', '?')} "
-            f"(expires {pol.get('expires')}){rate_note}; conditions[] remain "
-            "agent-verified (soft)")
+            f"(expires {pol.get('expires')}){rate_note}{cond_note}")
 
 
 def combine(decisions):

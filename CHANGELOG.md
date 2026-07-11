@@ -3,6 +3,23 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.4.0 — 2026-07-11
+
+Executable conditions — the last soft check on the L5 allow path can now
+be deterministic.
+
+### Added
+- Policy schema **1.3**: `conditions[]` entries may be objects
+  `{text, check, timeout}`. The enforcement hook runs `check` from the
+  project root (env: LORM_CAPABILITY, LORM_TOOL_NAME, LORM_ACTION,
+  CLAUDE_PROJECT_DIR); exit 0 = holds; non-zero/timeout/budget-exhausted
+  → degrade to L4 naming the condition. Per-check timeout ≤ 8 s, overall
+  budget 8 s. Plain strings remain agent-verified and are noted as such
+  in the allow reason.
+- Threat-model note: checks are part of the human-approved, P1-protected
+  policy file and run with the same privileges the gated action would.
+- 6 new tests (71 total).
+
 ## 2.3.0 — 2026-07-11
 
 Trust-lifecycle tooling — the SPEC §6 promotion/demotion lifecycle made

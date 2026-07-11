@@ -103,8 +103,9 @@ python3 skills/lorm/scripts/validate_policy.py lorm-policy.yaml
 - Trust-lifecycle tooling since 2.3.0: `/lorm:lorm-review` analyzes the
   audit log and drafts promotion/demotion transitions for human decision —
   see [`docs/trust-lifecycle.md`](docs/trust-lifecycle.md).
-- Next: executable `conditions[].check` commands, project-level classifier
-  extensions.
+- Executable conditions since 2.4.0 (schema 1.3 `conditions[].check`) —
+  the L5 allow path is fully deterministic when policies use them.
+- Next: project-level classifier extensions.
 
 ## License
 

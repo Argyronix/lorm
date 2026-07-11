@@ -49,9 +49,16 @@ boundary deterministic, auditable, and independent of the model's mood.
 
 What the hook deterministically enforces: policy matching, L5 structural
 validity (expiry, author≠approver), demotions, target bounds for file
-paths, rate limits against the audit log, policy-file and audit-log
-self-protection. What stays with the skill (soft): `conditions[]`
-evaluation, `max_objects`, diagnosis quality, outcome verification.
+paths, rate limits against the audit log, executable condition checks
+(schema 1.3), policy-file and audit-log self-protection. What stays with
+the skill (soft): plain-string `conditions[]`, `max_objects`, diagnosis
+quality, outcome verification.
+
+One consequence of executable checks deserves a line in the threat model:
+`conditions[].check` commands come from the policy file, which is
+human-approved and P1-protected — the hook itself gates agent attempts to
+edit it. A check runs with the same privileges the gated action would
+have; treat writing checks with the same care as writing the policy.
 
 ## Decision table (PreToolUse)
 
@@ -136,6 +143,27 @@ self-protection (P1/P2) cannot see policy-file writes made through an MCP
 filesystem server, and an input-pattern mismatch means "not this
 capability", falling through to the classifier — encode broad enough
 `input_patterns` deliberately.
+
+## Executable conditions (schema 1.3)
+
+`conditions[]` entries may be objects with a `check` command:
+
+```yaml
+conditions:
+  - text: "no deployment in progress"
+    check: "test ! -f /var/run/deploy.lock"
+    timeout: 2                     # seconds, default 5, max 8
+  - "cache hit rate < 20% sustained 15m"   # plain string: agent-verified
+```
+
+The hook runs each `check` from the project root with `LORM_CAPABILITY`,
+`LORM_TOOL_NAME`, `LORM_ACTION`, and `CLAUDE_PROJECT_DIR` in the
+environment. Exit 0 = the condition holds; a non-zero exit, a timeout, or
+an exhausted overall budget (8 s across all checks, inside the 10 s hook
+timeout) degrades the action to L4 with the condition named in the reason.
+Checks run only after the cheaper validity checks (expiry, demotion,
+targets, rate) have passed. Plain-string conditions remain the skill's
+duty and are noted as such in the `allow` reason.
 
 ## Non-interactive mode (`claude -p`)
 
