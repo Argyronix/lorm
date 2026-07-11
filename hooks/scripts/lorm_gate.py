@@ -402,6 +402,49 @@ def mcp_classifier_hit(classifiers, tool):
     return None
 
 
+_WILDCARD_CHARS = set("*?[]")
+
+
+def pattern_specificity(pattern):
+    """Literal (non-wildcard) character count — the specificity metric."""
+    return sum(1 for ch in pattern if ch not in _WILDCARD_CHARS)
+
+
+def _best_matching_specificity(patterns, texts):
+    best = -1
+    for pat in patterns or []:
+        if any(fnmatch.fnmatchcase(t, pat) for t in texts):
+            best = max(best, pattern_specificity(pat))
+    return best
+
+
+def cap_specificity(cap, tool, text=None, rel_path=None, tool_input=None):
+    """Specificity of a capability's match against one concrete call."""
+    match = cap.get("match") or {}
+    if tool == "Bash":
+        return _best_matching_specificity(
+            match.get("command_patterns"), [text or ""])
+    if tool in ("Write", "Edit"):
+        return _best_matching_specificity(
+            match.get("path_patterns"), [rel_path or ""])
+    score = _best_matching_specificity(match.get("tool_patterns"), [tool])
+    for pattern in (match.get("input_patterns") or {}).values():
+        score += pattern_specificity(pattern)
+    return score
+
+
+def select_most_specific(caps, tool, text=None, rel_path=None, tool_input=None):
+    """When several capabilities match one call, the policy author's most
+    specific entry is the intended classification (a narrow L5 exception
+    inside a broad L4 catch-all must be reachable). Ties keep all matches
+    and combine most-restrictively as before."""
+    if len(caps) <= 1:
+        return caps
+    scores = [cap_specificity(c, tool, text, rel_path, tool_input) for c in caps]
+    top = max(scores)
+    return [c for c, s in zip(caps, scores) if s == top]
+
+
 def classifier_hit(classifiers, tool, texts, rel_path_outside):
     """First matching built-in classifier id, or None (order matters)."""
     for entry in classifiers:
@@ -664,6 +707,7 @@ def decide_pre(payload):
         seg_lists = bash_segments if bash_segments else [None] * len(bash_texts)
         for text, seg in zip(bash_texts, seg_lists):
             caps_here = [c for c in caps if cap_matches_text(c, tool, text)]
+            caps_here = select_most_specific(caps_here, tool, text=text)
             for cap in caps_here:
                 decisions.append(decide_for_capability(
                     cap, policy, tool, tool_input,
@@ -675,6 +719,7 @@ def decide_pre(payload):
                     decisions.append(defaults_decision(hit))
     elif tool.startswith("mcp__"):
         caps_here = [c for c in caps if cap_matches_mcp(c, tool, tool_input)]
+        caps_here = select_most_specific(caps_here, tool, tool_input=tool_input)
         for cap in caps_here:
             decisions.append(decide_for_capability(
                 cap, policy, tool, tool_input, None,
@@ -685,6 +730,7 @@ def decide_pre(payload):
                 decisions.append(defaults_decision(hit))
     else:
         caps_here = [c for c in caps if cap_matches_path(c, tool, rel_path)]
+        caps_here = select_most_specific(caps_here, tool, rel_path=rel_path)
         for cap in caps_here:
             decisions.append(decide_for_capability(
                 cap, policy, tool, tool_input, None,
@@ -768,6 +814,15 @@ def run_post(payload):
     else:
         matched = [c for c in caps if cap_matches_path(c, tool, rel_path)]
     if matched:
+        if len(matched) > 1:
+            def _score(c):
+                if tool == "Bash":
+                    return max(cap_specificity(c, tool, text=t)
+                               for t in bash_texts)
+                if tool.startswith("mcp__"):
+                    return cap_specificity(c, tool, tool_input=tool_input)
+                return cap_specificity(c, tool, rel_path=rel_path)
+            matched.sort(key=_score, reverse=True)
         cap = matched[0]
         capability = cap.get("id")
         eff, _ = effective_level(cap, policy, now.date())

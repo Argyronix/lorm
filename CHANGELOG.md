@@ -3,6 +3,20 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.4.2 — 2026-07-11
+
+### Fixed
+- **Narrow L5 exceptions inside broad L4 catch-alls were unreachable.**
+  With `fs.delete` at L4 (`"rm *"`) and a canary L5 (`"rm .tmp-*"`), both
+  matched and most-restrictive-wins always chose L4 — found while
+  dogfooding a real policy. Now, when several capabilities match the same
+  segment/call, the most specific pattern (most literal characters) wins;
+  exact ties still combine most-restrictively. Applies to Bash, Write/Edit,
+  and MCP matching, and to post-hoc audit attribution.
+- Test fixture bug: appended capabilities landed after the audit block,
+  so one multi-capability test passed via a YAML parse error rather than
+  the intended path.
+
 ## 2.4.1 — 2026-07-11
 
 ### Fixed

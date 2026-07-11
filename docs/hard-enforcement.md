@@ -90,6 +90,12 @@ Combining rule when several segments/capabilities produce decisions:
   built-in classifiers for segments no capability covers — so an
   L5-allowed segment can never smuggle a dangerous sibling through. An
   unparseable command falls back to matching the raw string.
+- **Specificity beats breadth.** When several capabilities match the same
+  segment/call, the entry whose matching pattern has the most literal
+  (non-wildcard) characters wins — so a narrow L5 exception
+  (`"rm .tmp-*"`) is reachable inside a broad L4 catch-all (`"rm *"`),
+  the natural shape of real policies. Exact ties keep all matches and
+  combine most-restrictively.
 - **Capability matching** uses the schema 1.1 `match` block:
   `command_patterns` (fnmatch vs segment text) for Bash,
   `path_patterns` (fnmatch vs project-relative path) for Write/Edit.

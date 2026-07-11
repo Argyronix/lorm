@@ -688,18 +688,40 @@ def test_review():
         shutil.rmtree(x)
 
 
+def add_caps(base, caps_yaml):
+    """Insert extra capability entries BEFORE the audit block."""
+    return base.replace("audit:\n", caps_yaml + "audit:\n")
+
+
 def test_multi_cap():
     print("multiple capabilities on one command")
-    two = BASE_L5 + f"""\
+    # equal specificity (identical patterns) -> tie -> most restrictive wins
+    two = add_caps(BASE_L5, """\
   - id: fs.cleanup.strict
     level: L4
-    match: {{tools: [Bash], command_patterns: ["rm -rf build*"]}}
-    bounds: {{targets: ["build/*"]}}
-"""
+    match: {tools: [Bash], command_patterns: ["rm -rf build*"]}
+    bounds: {targets: ["build/*"]}
+""")
     p = make_project(two)
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p), p)
-    check("L5 allow + L4 ask on same command -> ask wins", d == "ask", f"{d} {r}")
+    check("equal specificity tie -> ask wins", d == "ask", f"{d} {r}")
     shutil.rmtree(p)
+
+    # broad L4 catch-all + narrow L5 exception -> specificity wins
+    carveout = add_caps(BASE_L5, """\
+  - id: fs.delete.docs
+    level: L4
+    match: {tools: [Bash], command_patterns: ["rm *"]}
+    bounds: {targets: ["*"]}
+""")
+    p2 = make_project(carveout)
+    rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p2), p2)
+    check("narrow L5 beats broad L4 catch-all (specificity)",
+          d == "allow" and "fs.cleanup.build" in r, f"{d} {r}")
+    rc, d, r, _ = run_gate("pre", bash_payload("rm data.txt", p2), p2)
+    check("outside the carve-out -> broad L4 still asks",
+          d == "ask" and "fs.delete.docs" in r, f"{d} {r}")
+    shutil.rmtree(p2)
 
 
 def main():
