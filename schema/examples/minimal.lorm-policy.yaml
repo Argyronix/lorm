@@ -1,0 +1,12 @@
+# Smallest useful LORM policy: no capability is pre-authorized.
+# Everything state-changing stays at L4 (human approves each action);
+# anything unclassifiable is escalated to a human.
+lorm_policy: "1.0"
+metadata:
+  project: "example-minimal"
+  owner: "ops-team@example.com"
+  updated: 2026-07-11
+defaults:
+  max_level: L3
+  unknown_action: escalate
+  uncertainty_threshold: 0.2

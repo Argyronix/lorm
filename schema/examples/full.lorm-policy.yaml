@@ -1,0 +1,101 @@
+# Full LORM policy example: one L4 capability, one L5 capability,
+# audit configuration, and one active demotion.
+lorm_policy: "1.0"
+
+metadata:
+  project: "acme-payments"
+  owner: "platform-team@acme.example"
+  updated: 2026-07-11
+
+defaults:
+  max_level: L3            # unlisted action classes: recommend-only
+  unknown_action: escalate
+  uncertainty_threshold: 0.2
+
+capabilities:
+  # --- L4: human authorizes each execution; bounds are pre-declared ---
+  - id: db.index.create
+    description: "Create secondary indexes on non-primary tables"
+    level: L4
+    bounds:
+      targets: ["staging/*", "prod/analytics_*"]
+      blast_radius:
+        max_objects: 1
+        max_actions_per_hour: 3
+    rollback: "DROP INDEX CONCURRENTLY <name>"
+    verification:
+      expect: "query latency on the target table does not regress > 10%"
+      window: "30m"
+
+  # --- L5: policy authorizes; full delegation metadata is REQUIRED ---
+  - id: cache.flush
+    description: "Flush the session cache when hit rate collapses"
+    level: L5
+    policy:
+      version: 3
+      author: "alice@acme.example"
+      approved_by: "bob@acme.example"   # must differ from author
+      approved_at: 2026-07-01
+      expires: 2026-10-01               # mandatory; expired => treated as L4
+      tested: "canary run 2026-06-28, 14 executions, 0 rollbacks"
+    conditions:
+      - "cache hit rate < 20% sustained for 15 minutes"
+      - "no deployment in progress"
+    bounds:
+      targets: ["prod/session-cache"]
+      blast_radius:
+        max_objects: 1
+        max_actions_per_hour: 2
+    rollback: "cache repopulates from origin; no data loss possible"
+    verification:
+      expect: "hit rate > 50%"
+      window: "30m"
+    escalation:
+      on_failure:
+        demote_to: L4
+        notify: "oncall@acme.example"
+
+  # --- L5 on paper, but currently demoted (see demotions[] below) ---
+  - id: db.stats.analyze
+    description: "Run ANALYZE on tables with stale statistics"
+    level: L5
+    policy:
+      version: 2
+      author: "alice@acme.example"
+      approved_by: "bob@acme.example"
+      approved_at: 2026-05-15
+      expires: 2026-11-15
+      tested: "staging soak 2026-05-01..14, 122 executions, 0 failures"
+    conditions:
+      - "table statistics older than 7 days AND >10% rows changed"
+    bounds:
+      targets: ["prod/*"]
+      blast_radius:
+        max_objects: 5
+        max_actions_per_hour: 10
+    rollback: "none needed; ANALYZE only refreshes planner statistics"
+    verification:
+      expect: "pg_stat_user_tables.last_analyze updated for target tables"
+      window: "5m"
+
+audit:
+  log: ".lorm/audit.jsonl"
+  record_fields:
+    - timestamp
+    - capability
+    - level
+    - authorizer
+    - action
+    - params
+    - diagnosis_ref
+    - outcome
+    - verified
+
+demotions:
+  # Overrides the capability's listed level until re-promotion (SPEC §6.5, §6.7).
+  - capability: db.stats.analyze
+    from: L5
+    to: L4
+    reason: "rollback invoked 2026-07-03 (verification failure on prod/orders)"
+    date: 2026-07-03
+    until: "re-promotion per SPEC §6.2"

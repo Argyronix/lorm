@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/argyronix/lorm/schema/lorm-policy.schema.json",
+  "title": "LORM Policy",
+  "description": "Machine-readable LORM policy document (SPEC.md §13). Conventionally stored as lorm-policy.yaml at the project root or .lorm/policy.yaml.",
+  "type": "object",
+  "properties": {
+    "lorm_policy": {
+      "description": "Policy format version (independent of the LORM spec version).",
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "project": { "type": "string" },
+        "owner": {
+          "description": "Person or team accountable for this policy document (the principal or delegate).",
+          "type": "string"
+        },
+        "updated": { "type": "string", "format": "date" }
+      },
+      "required": ["project", "owner"],
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} }
+    },
+    "defaults": {
+      "description": "Behavior for action classes not matched by any capabilities[] entry.",
+      "type": "object",
+      "properties": {
+        "max_level": {
+          "description": "Highest level any unlisted capability may operate at. RECOMMENDED: L3.",
+          "$ref": "#/$defs/level"
+        },
+        "unknown_action": {
+          "description": "What a consumer does with an action class it cannot classify.",
+          "type": "string",
+          "enum": ["escalate", "refuse"]
+        },
+        "uncertainty_threshold": {
+          "description": "Diagnosis uncertainty above which a capability degrades one level and escalates (0 = no uncertainty tolerated, 1 = any tolerated).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/capability" }
+    },
+    "audit": {
+      "type": "object",
+      "properties": {
+        "log": {
+          "description": "Path (relative to the policy file) of the append-only audit log; JSON Lines.",
+          "type": "string"
+        },
+        "record_fields": {
+          "description": "Fields every audit record must contain. MUST include at least the SPEC §10.3 minimum set.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      },
+      "required": ["log"],
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} }
+    },
+    "demotions": {
+      "description": "Active demotions. A demotion entry OVERRIDES the listed level of the named capability (SPEC §6.5). Maintained by humans; the system may propose entries but never writes them (I-8).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "capability": { "type": "string" },
+          "from": { "$ref": "#/$defs/level" },
+          "to": { "$ref": "#/$defs/level" },
+          "reason": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "until": {
+            "description": "Condition or date for re-promotion; re-promotion always follows the full SPEC §6.2 path.",
+            "type": "string"
+          }
+        },
+        "required": ["capability", "to", "reason"],
+        "additionalProperties": false,
+        "patternProperties": { "^x-": {} }
+      }
+    }
+  },
+  "required": ["lorm_policy", "metadata"],
+  "additionalProperties": false,
+  "patternProperties": { "^x-": {} },
+  "$defs": {
+    "level": {
+      "type": "string",
+      "enum": ["L0", "L1", "L2", "L3", "L4", "L5"]
+    },
+    "capability": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Dotted action-class identifier (domain.object.verb). Consumers match exact first, then glob.",
+          "type": "string",
+          "pattern": "^[a-z0-9_*-]+(\\.[a-z0-9_*-]+)*$"
+        },
+        "description": { "type": "string" },
+        "level": { "$ref": "#/$defs/level" },
+        "bounds": { "$ref": "#/$defs/bounds" },
+        "rollback": {
+          "description": "Concrete rollback procedure, or the literal string 'irreversible' (which SHOULD disqualify the capability from L5, SPEC I-7).",
+          "type": "string"
+        },
+        "verification": { "$ref": "#/$defs/verification" },
+        "policy": { "$ref": "#/$defs/policyBlock" },
+        "conditions": {
+          "description": "Preconditions that must hold before an L5 execution. Strings in this schema version: agent-interpretable, human-auditable. A structured machine-evaluable form is reserved for a future version.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "escalation": {
+          "type": "object",
+          "properties": {
+            "on_failure": {
+              "type": "object",
+              "properties": {
+                "demote_to": { "$ref": "#/$defs/level" },
+                "notify": { "type": "string" }
+              },
+              "additionalProperties": false,
+              "patternProperties": { "^x-": {} }
+            }
+          },
+          "additionalProperties": false,
+          "patternProperties": { "^x-": {} }
+        }
+      },
+      "required": ["id", "level"],
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "level": { "const": "L5" } }
+          },
+          "then": {
+            "required": ["policy", "bounds", "verification"],
+            "properties": {
+              "rollback": { "type": "string" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "level": { "const": "L4" } }
+          },
+          "then": {
+            "required": ["bounds"]
+          }
+        }
+      ]
+    },
+    "bounds": {
+      "type": "object",
+      "properties": {
+        "targets": {
+          "description": "Where the capability may act (paths, object names, environments); glob patterns allowed.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "blast_radius": {
+          "type": "object",
+          "properties": {
+            "max_objects": {
+              "description": "Maximum objects a single action may touch.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_actions_per_hour": {
+              "description": "Rate limit, evaluated against the audit log (SPEC 13-3).",
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false,
+          "patternProperties": { "^x-": {} }
+        }
+      },
+      "required": ["targets"],
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} }
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "expect": {
+          "description": "Declared expected outcome, checked after execution (SPEC §10.1).",
+          "type": "string"
+        },
+        "window": {
+          "description": "How long after execution the outcome is checked (e.g. '30m', '24h').",
+          "type": "string"
+        }
+      },
+      "required": ["expect"],
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} }
+    },
+    "policyBlock": {
+      "description": "L5 delegation metadata (SPEC §8). Required for every L5 capability.",
+      "type": "object",
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "author": { "type": "string" },
+        "approved_by": {
+          "description": "MUST differ from author (SPEC 8-1). Consumers SHOULD verify.",
+          "type": "string"
+        },
+        "approved_at": { "type": "string", "format": "date" },
+        "expires": {
+          "description": "Mandatory (SPEC 8-2). Expired => consumers treat the capability as L4.",
+          "type": "string",
+          "format": "date"
+        },
+        "tested": {
+          "description": "Evidence of testing before activation: what, when, outcome.",
+          "type": "string"
+        }
+      },
+      "required": ["version", "author", "approved_by", "approved_at", "expires", "tested"],
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} }
+    }
+  }
+}
