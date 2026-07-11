@@ -3,6 +3,14 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.4.1 — 2026-07-11
+
+### Fixed
+- Plugin failed to load when installed from the marketplace: `hooks/hooks.json`
+  is auto-discovered by Claude Code, and the explicit `"hooks"` manifest field
+  made it load twice ("Duplicate hooks file detected"). The manifest field is
+  removed; found by dogfooding the marketplace install.
+
 ## 2.4.0 — 2026-07-11
 
 Executable conditions — the last soft check on the L5 allow path can now
