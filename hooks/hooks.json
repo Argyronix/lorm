@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/lorm_gate.py\" pre",
+            "timeout": 10,
+            "statusMessage": "LORM: checking authorization"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/lorm_gate.py\" post",
+            "timeout": 10,
+            "statusMessage": "LORM: writing audit record"
+          }
+        ]
+      }
+    ]
+  }
+}

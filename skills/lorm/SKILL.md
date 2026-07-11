@@ -123,9 +123,13 @@ depth of diagnostics, never their existence.
 - Check the outcome against `verification.expect` (or against the expected
   outcome you stated in the proposal) and report the result: verified /
   failed / unverifiable-with-reason.
-- If the policy defines `audit.log`, append a JSON Lines record with the
-  fields listed in `audit.record_fields` (format:
+- **If `.lorm/hook-active` exists**, the LORM enforcement hook is running
+  and already appended the execution record — do NOT append your own (it
+  would double-count against rate limits). Append only a *verification
+  record* after checking the outcome (format:
   [references/policy-format.md](references/policy-format.md)).
+- Otherwise (no hook), append the full execution record yourself with the
+  fields listed in `audit.record_fields`.
 - A failed verification on an L5 action: stop further executions of that
   capability this session, report, and propose a demotion entry (step 8).
 

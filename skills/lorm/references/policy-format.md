@@ -70,6 +70,33 @@ Lines). Fields per `audit.record_fields`; the SPEC §10.3 minimum:
 For L4, `authorizer` is the approving human: `"human:edward (this session)"`.
 Write the record even when verification failed — especially then.
 
+## Coexistence with the enforcement hook
+
+The LORM plugin's PostToolUse hook writes execution records automatically
+and touches **`.lorm/hook-active`** on first append. When that marker
+exists:
+
+- do NOT append execution records yourself — the hook already did, and a
+  duplicate would double-count against `max_actions_per_hour`;
+- after verifying the outcome, append a **verification record** instead —
+  it references the execution record by timestamp and never counts toward
+  rate limits:
+
+```json
+{"timestamp": "2026-07-11T15:02:00Z", "capability": "cache.flush",
+ "verified": "verified", "x-verifies": "2026-07-11T14:32:07Z",
+ "x-writer": "lorm-skill"}
+```
+
+Rate limits count only *execution* records (those having `capability` and
+`action` and lacking `x-verifies`).
+
+Note: a capability's optional `match` block (schema 1.1) is consumed by the
+enforcement hook, not by you — your classification stays semantic (step 1
+of the skill). An L5 entry without `match` is soft-only: you may act under
+it, but the hook cannot pre-authorize it, so expect the normal permission
+dialog.
+
 ## What you never do to this file
 
 You may *propose* diffs to `lorm-policy.yaml` (new capabilities, promotion

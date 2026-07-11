@@ -1,0 +1,103 @@
+{
+  "comment": "Built-in dangerous-action classifiers for the LORM enforcement hook. Used only when no policy capability match applies; hits route through defaults.unknown_action (escalate->ask, refuse->deny). Patterns are fnmatch, evaluated against wrapper-stripped shell segments and the raw command. JSON (not YAML) so it loads without PyYAML.",
+  "classifiers": [
+    {
+      "capability": "fs.delete",
+      "tools": ["Bash"],
+      "command_patterns": [
+        "rm *",
+        "rmdir *",
+        "shred *",
+        "find * -delete*",
+        "git clean *"
+      ]
+    },
+    {
+      "capability": "git.history.rewrite",
+      "tools": ["Bash"],
+      "command_patterns": [
+        "git push *--force*",
+        "git push *-f",
+        "git push *-f *",
+        "git rebase *",
+        "git filter-branch*",
+        "git reset --hard*",
+        "git branch -D *",
+        "git checkout -- *"
+      ]
+    },
+    {
+      "capability": "git.push",
+      "tools": ["Bash"],
+      "command_patterns": [
+        "git push*"
+      ]
+    },
+    {
+      "capability": "db.destructive",
+      "tools": ["Bash"],
+      "command_patterns": [
+        "psql *DROP *",
+        "psql *TRUNCATE *",
+        "psql *DELETE FROM *",
+        "mysql *DROP *",
+        "mysql *TRUNCATE *",
+        "mysql *DELETE FROM *",
+        "redis-cli *FLUSH*",
+        "redis-cli *flush*",
+        "mongo* *drop*"
+      ]
+    },
+    {
+      "capability": "sys.config.change",
+      "tools": ["Bash"],
+      "command_patterns": [
+        "chmod * /etc/*",
+        "chown * /etc/*",
+        "chown -R *",
+        "systemctl *",
+        "service * stop*",
+        "service * restart*",
+        "iptables *",
+        "ufw *",
+        "sysctl -w *"
+      ]
+    },
+    {
+      "capability": "pkg.install",
+      "tools": ["Bash"],
+      "command_patterns": [
+        "pip install *",
+        "pip3 install *",
+        "npm install -g *",
+        "apt install *",
+        "apt-get install *",
+        "dnf install *",
+        "yum install *",
+        "brew install *"
+      ]
+    },
+    {
+      "capability": "shell.indirect_exec",
+      "tools": ["Bash"],
+      "command_patterns": [
+        "eval *",
+        "bash -c *",
+        "sh -c *",
+        "sh",
+        "bash",
+        "zsh",
+        "source *",
+        "curl * | *sh*",
+        "wget * | *sh*",
+        "curl *|*sh*",
+        "wget *|*sh*"
+      ]
+    },
+    {
+      "capability": "fs.write.outside_project",
+      "tools": ["Write", "Edit"],
+      "path_outside_project": true
+    }
+  ]
+}

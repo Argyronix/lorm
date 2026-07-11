@@ -1,6 +1,6 @@
 # LORM Applied: AI Coding Agents
 
-*Non-normative. The domain the `skill/lorm` Agent Skill targets.*
+*Non-normative. The domain the `skills/lorm` Agent Skill targets.*
 
 ## Why coding agents need this
 

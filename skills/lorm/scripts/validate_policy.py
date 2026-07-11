@@ -15,6 +15,10 @@ cannot express:
   - policy.approved_by must differ from policy.author (SPEC 8-1)
   - warns on expired L5 entries (consumers must treat them as L4, SPEC 13-1)
   - warns when a demotion references an unknown capability id
+  - match-block checks (schema 1.1): command_patterns require Bash in tools,
+    path_patterns require Write/Edit; warns on L5 entries without match
+    (soft-only: the enforcement hook cannot grant allow) and on Bash-matched
+    L4/L5 entries whose bounds.targets are not hook-verifiable
 """
 
 import datetime
@@ -97,6 +101,40 @@ def semantic_checks(doc: dict) -> tuple[list[str], list[str]]:
             warnings.append(
                 f"capability {cid}: irreversible L5 capability — SPEC I-7 "
                 f"says this SHOULD be reconsidered"
+            )
+
+        match = cap.get("match")
+        if isinstance(match, dict):
+            tools = match.get("tools") or []
+            if match.get("command_patterns") and tools and "Bash" not in tools:
+                errors.append(
+                    f"capability {cid}: match.command_patterns requires "
+                    f"'Bash' in match.tools"
+                )
+            if match.get("path_patterns") and tools and not (
+                {"Write", "Edit"} & set(tools)
+            ):
+                errors.append(
+                    f"capability {cid}: match.path_patterns requires 'Write' "
+                    f"or 'Edit' in match.tools"
+                )
+            if (
+                match.get("command_patterns")
+                and cap.get("level") in ("L4", "L5")
+                and not any(
+                    "/" in t or t.startswith(("./", "*"))
+                    for t in (cap.get("bounds") or {}).get("targets", [])
+                )
+            ):
+                warnings.append(
+                    f"capability {cid}: Bash-matched {cap.get('level')} entry "
+                    f"with non-path bounds.targets — the hook cannot verify "
+                    f"targets; ensure command_patterns encode the target scope"
+                )
+        elif cap.get("level") == "L5":
+            warnings.append(
+                f"capability {cid}: L5 entry without match block — soft-only "
+                f"(the enforcement hook cannot grant allow for it)"
             )
 
     for dem in doc.get("demotions") or []:

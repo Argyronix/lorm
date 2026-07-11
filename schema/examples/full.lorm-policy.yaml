@@ -1,6 +1,7 @@
-# Full LORM policy example: one L4 capability, one L5 capability,
-# audit configuration, and one active demotion.
-lorm_policy: "1.0"
+# Full LORM policy example: one L4 capability, two L5 capabilities,
+# hard-enforcement match blocks (schema 1.1), audit configuration,
+# and one active demotion.
+lorm_policy: "1.1"
 
 metadata:
   project: "acme-payments"
@@ -17,6 +18,10 @@ capabilities:
   - id: db.index.create
     description: "Create secondary indexes on non-primary tables"
     level: L4
+    match:                      # hard enforcement: hook forces the approval
+      tools: [Bash]             # dialog even in permissive modes
+      command_patterns:
+        - "psql *CREATE INDEX*"
     bounds:
       targets: ["staging/*", "prod/analytics_*"]
       blast_radius:
@@ -31,6 +36,11 @@ capabilities:
   - id: cache.flush
     description: "Flush the session cache when hit rate collapses"
     level: L5
+    match:                      # command_patterns encode the target scope:
+      tools: [Bash]             # only the session-cache host, only FLUSHDB
+      command_patterns:
+        - "redis-cli -h session-cache FLUSHDB*"
+        - "redis-cli -h session-cache flushdb*"
     policy:
       version: 3
       author: "alice@acme.example"

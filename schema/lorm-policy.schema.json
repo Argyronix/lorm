@@ -115,6 +115,7 @@
           "type": "string"
         },
         "verification": { "$ref": "#/$defs/verification" },
+        "match": { "$ref": "#/$defs/match" },
         "policy": { "$ref": "#/$defs/policyBlock" },
         "conditions": {
           "description": "Preconditions that must hold before an L5 execution. Strings in this schema version: agent-interpretable, human-auditable. A structured machine-evaluable form is reserved for a future version.",
@@ -162,6 +163,36 @@
           }
         }
       ]
+    },
+    "match": {
+      "description": "Hard-enforcement matcher (schema 1.1+). Consumed by the enforcement hook to deterministically map tool calls to this capability. Entries without match are enforced only by soft consumers (the agent skill). For command-shaped capabilities, command_patterns MUST encode the target scope (Bash bounds.targets are not hook-verifiable).",
+      "type": "object",
+      "properties": {
+        "tools": {
+          "description": "Claude Code tools this capability can arrive through.",
+          "type": "array",
+          "items": { "type": "string", "enum": ["Bash", "Write", "Edit"] },
+          "minItems": 1
+        },
+        "command_patterns": {
+          "description": "fnmatch patterns evaluated against each shell segment of a Bash command and against the raw command string.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "path_patterns": {
+          "description": "fnmatch patterns against the project-relative path of a Write/Edit file_path. Note: '*' matches across '/'.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      },
+      "anyOf": [
+        { "required": ["command_patterns"] },
+        { "required": ["path_patterns"] }
+      ],
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} }
     },
     "bounds": {
       "type": "object",

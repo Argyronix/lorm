@@ -1,0 +1,14 @@
+{
+  "name": "argyronix-lorm",
+  "owner": {
+    "name": "Argyronix",
+    "email": "edwardfish@argyronix.com"
+  },
+  "plugins": [
+    {
+      "name": "lorm",
+      "source": "./",
+      "description": "Layered Operational Responsibility Model — policy-driven authorization gate and audit trail for Claude Code"
+    }
+  ]
+}
