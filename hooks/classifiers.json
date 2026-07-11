@@ -98,6 +98,19 @@
       "capability": "fs.write.outside_project",
       "tools": ["Write", "Edit"],
       "path_outside_project": true
+    },
+    {
+      "capability": "mcp.write_operation",
+      "comment": "Mutating-verb MCP tools; read-only verbs (get/list/read/search/query without write intent) pass through. Escalate-not-refuse is the worst case for a false positive.",
+      "tool_patterns": [
+        "mcp__*__create*", "mcp__*__delete*", "mcp__*__remove*",
+        "mcp__*__update*", "mcp__*__write*", "mcp__*__edit*",
+        "mcp__*__execute*", "mcp__*__run*", "mcp__*__push*",
+        "mcp__*__merge*", "mcp__*__drop*", "mcp__*__flush*",
+        "mcp__*__truncate*", "mcp__*__insert*", "mcp__*__set_*",
+        "mcp__*__send*", "mcp__*__post*", "mcp__*__deploy*",
+        "mcp__*__restart*", "mcp__*__stop*", "mcp__*__kill*"
+      ]
     }
   ]
 }

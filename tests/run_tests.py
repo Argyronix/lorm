@@ -412,6 +412,109 @@ def test_post_audit():
     shutil.rmtree(p), shutil.rmtree(p2)
 
 
+MCP_L5 = f"""\
+lorm_policy: "1.2"
+metadata: {{project: test, owner: owner@example.com}}
+defaults: {{max_level: L3, unknown_action: escalate}}
+capabilities:
+  - id: mcp.postgres.analyze
+    level: L5
+    match:
+      tool_patterns: ["mcp__postgres__query"]
+      input_patterns:
+        query: "ANALYZE *"
+    policy:
+      version: 1
+      author: author@example.com
+      approved_by: approver@example.com
+      approved_at: 2026-07-01
+      expires: {FUTURE}
+      tested: "test corpus"
+    bounds:
+      targets: ["prod/*"]
+      blast_radius: {{max_objects: 5, max_actions_per_hour: 3}}
+    rollback: "none needed"
+    verification: {{expect: "stats refreshed"}}
+  - id: mcp.github.issue
+    level: L4
+    match:
+      tool_patterns: ["mcp__github__create_issue"]
+    bounds:
+      targets: ["github/*"]
+audit:
+  log: ".lorm/audit.jsonl"
+  record_fields: [timestamp, capability, level, authorizer, action, params, diagnosis_ref, outcome, verified]
+"""
+
+
+def mcp_payload(tool, tool_input, project):
+    return {"session_id": "test-session", "cwd": project,
+            "hook_event_name": "PreToolUse", "tool_name": tool,
+            "tool_input": tool_input}
+
+
+def test_mcp():
+    print("MCP tools")
+    p = make_project(MCP_L5)
+    rc, d, r, _ = run_gate("pre", mcp_payload(
+        "mcp__postgres__query", {"query": "ANALYZE prod.orders"}, p), p)
+    check("MCP valid L5 -> allow",
+          d == "allow" and "mcp.postgres.analyze" in r, f"{d} {r}")
+    rc, d, r, _ = run_gate("pre", mcp_payload(
+        "mcp__postgres__query", {"query": "DROP TABLE prod.orders"}, p), p)
+    check("MCP input pattern mismatch -> not the cap; read-verb query -> silent",
+          d is None, f"{d} {r}")
+    rc, d, r, _ = run_gate("pre", mcp_payload(
+        "mcp__postgres__execute", {"query": "ANALYZE x"}, p), p)
+    check("MCP tool pattern mismatch + mutating verb -> builtin ask",
+          d == "ask" and "mcp.write_operation" in r, f"{d} {r}")
+    rc, d, r, _ = run_gate("pre", mcp_payload(
+        "mcp__github__create_issue", {"title": "bug"}, p), p)
+    check("MCP L4 entry -> ask", d == "ask" and "mcp.github.issue" in r, f"{d} {r}")
+    rc, d, r, _ = run_gate("pre", mcp_payload(
+        "mcp__github__get_issue", {"number": 1}, p), p)
+    check("MCP read-only verb unlisted -> silent", d is None, f"{d} {r}")
+    rc, d, r, _ = run_gate("pre", mcp_payload(
+        "mcp__slack__send_message", {"text": "hi"}, p), p)
+    check("MCP mutating verb unlisted -> ask", d == "ask", f"{d} {r}")
+
+    expired = MCP_L5.replace(f"expires: {FUTURE}", f"expires: {PAST}")
+    p2 = make_project(expired)
+    rc, d, r, _ = run_gate("pre", mcp_payload(
+        "mcp__postgres__query", {"query": "ANALYZE prod.orders"}, p2), p2)
+    check("MCP expired L5 -> ask", d == "ask" and PAST in r, f"{d} {r}")
+
+    p3 = make_project(MCP_L5)
+    audit_seed(p3, "mcp.postgres.analyze", 3, age_seconds=60)
+    rc, d, r, _ = run_gate("pre", mcp_payload(
+        "mcp__postgres__query", {"query": "ANALYZE prod.orders"}, p3), p3)
+    check("MCP rate exhausted -> ask", d == "ask" and "3/3" in r, f"{d} {r}")
+
+    # non-string input value matched via JSON serialization
+    numeric = MCP_L5.replace('query: "ANALYZE *"', 'limit: "1*"')
+    p4 = make_project(numeric)
+    rc, d, r, _ = run_gate("pre", mcp_payload(
+        "mcp__postgres__query", {"limit": 10}, p4), p4)
+    check("MCP non-string input matched via JSON form", d == "allow", f"{d} {r}")
+
+    # post: audit record for MCP execution
+    p5 = make_project(MCP_L5)
+    payload = mcp_payload("mcp__postgres__query",
+                          {"query": "ANALYZE prod.orders"}, p5)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_output"] = "ANALYZE"
+    run_gate("post", payload, p5)
+    audit = os.path.join(p5, ".lorm", "audit.jsonl")
+    rec = json.loads(open(audit).read().splitlines()[0])
+    check("MCP post record: L5 + policy authorizer + tool name in action",
+          rec["level"] == "L5"
+          and rec["authorizer"] == "policy:mcp.postgres.analyze@1"
+          and "mcp__postgres__query" in rec["action"],
+          str(rec))
+    for x in (p, p2, p3, p4, p5):
+        shutil.rmtree(x)
+
+
 def test_multi_cap():
     print("multiple capabilities on one command")
     two = BASE_L5 + f"""\
@@ -430,7 +533,7 @@ def main():
     for fn in (test_passive, test_l5_allow_and_degrades, test_rate_limit,
                test_l4_l3_and_defaults, test_compound_and_wrappers,
                test_write_paths, test_self_protection, test_fail_closed,
-               test_post_audit, test_multi_cap):
+               test_post_audit, test_mcp, test_multi_cap):
         fn()
     print(f"\n{PASS} passed, {len(FAIL)} failed")
     if FAIL:

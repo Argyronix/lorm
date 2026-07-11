@@ -118,6 +118,22 @@ def semantic_checks(doc: dict) -> tuple[list[str], list[str]]:
                     f"capability {cid}: match.path_patterns requires 'Write' "
                     f"or 'Edit' in match.tools"
                 )
+            if match.get("input_patterns") and not match.get("tool_patterns"):
+                errors.append(
+                    f"capability {cid}: match.input_patterns requires "
+                    f"match.tool_patterns (input matching is MCP-only)"
+                )
+            if (
+                cap.get("level") in ("L4", "L5")
+                and any(p in ("mcp__*", "*", "mcp__*__*")
+                        for p in match.get("tool_patterns") or [])
+                and not match.get("input_patterns")
+            ):
+                warnings.append(
+                    f"capability {cid}: {cap.get('level')} entry with a "
+                    f"broad tool_pattern and no input_patterns — encode the "
+                    f"server/tool and target scope"
+                )
             if (
                 match.get("command_patterns")
                 and cap.get("level") in ("L4", "L5")

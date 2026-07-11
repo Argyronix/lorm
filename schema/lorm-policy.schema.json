@@ -165,11 +165,11 @@
       ]
     },
     "match": {
-      "description": "Hard-enforcement matcher (schema 1.1+). Consumed by the enforcement hook to deterministically map tool calls to this capability. Entries without match are enforced only by soft consumers (the agent skill). For command-shaped capabilities, command_patterns MUST encode the target scope (Bash bounds.targets are not hook-verifiable).",
+      "description": "Hard-enforcement matcher (schema 1.1+; MCP fields 1.2+). Consumed by the enforcement hook to deterministically map tool calls to this capability. Entries without match are enforced only by soft consumers (the agent skill). For command-shaped and MCP-shaped capabilities, command_patterns / input_patterns MUST encode the target scope (bounds.targets are only hook-verifiable for file paths).",
       "type": "object",
       "properties": {
         "tools": {
-          "description": "Claude Code tools this capability can arrive through.",
+          "description": "Claude Code built-in tools this capability can arrive through.",
           "type": "array",
           "items": { "type": "string", "enum": ["Bash", "Write", "Edit"] },
           "minItems": 1
@@ -185,11 +185,24 @@
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1
+        },
+        "tool_patterns": {
+          "description": "Schema 1.2+: fnmatch patterns against the full MCP tool name (mcp__<server>__<tool>), e.g. 'mcp__postgres__query'. Avoid bare 'mcp__*' on L4/L5 entries — encode the server and tool.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "input_patterns": {
+          "description": "Schema 1.2+: per-field fnmatch patterns against the MCP tool_input. Every listed field must exist and match (AND). Non-string values are matched against their JSON serialization. This is where the target scope of an MCP capability lives.",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
         }
       },
       "anyOf": [
         { "required": ["command_patterns"] },
-        { "required": ["path_patterns"] }
+        { "required": ["path_patterns"] },
+        { "required": ["tool_patterns"] }
       ],
       "additionalProperties": false,
       "patternProperties": { "^x-": {} }

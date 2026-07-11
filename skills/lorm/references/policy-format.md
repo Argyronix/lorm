@@ -91,11 +91,12 @@ exists:
 Rate limits count only *execution* records (those having `capability` and
 `action` and lacking `x-verifies`).
 
-Note: a capability's optional `match` block (schema 1.1) is consumed by the
+Note: a capability's optional `match` block (schema 1.1: command/path
+patterns; 1.2: MCP `tool_patterns`/`input_patterns`) is consumed by the
 enforcement hook, not by you — your classification stays semantic (step 1
 of the skill). An L5 entry without `match` is soft-only: you may act under
 it, but the hook cannot pre-authorize it, so expect the normal permission
-dialog.
+dialog. MCP action classes follow `mcp.<server>.<tool>` naming.
 
 ## What you never do to this file
 

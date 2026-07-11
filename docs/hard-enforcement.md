@@ -3,8 +3,8 @@
 *Normative for the enforcement hook. The policy format itself is defined by
 SPEC.md §13 and `schema/lorm-policy.schema.json`.*
 
-The plugin wires two hooks around every `Bash`, `Write`, and `Edit` tool
-call:
+The plugin wires two hooks around every `Bash`, `Write`, `Edit`, and MCP
+(`mcp__*`) tool call:
 
 - **PreToolUse** (`hooks/scripts/lorm_gate.py pre`) — the authorization
   gate: `allow` what a valid L5 policy entry proves, force `ask` where LORM
@@ -104,8 +104,38 @@ Combining rule when several segments/capabilities produce decisions:
 - **Built-in classifiers** live in `hooks/classifiers.json` (first match
   wins, order matters): `fs.delete`, `git.history.rewrite`, `git.push`,
   `db.destructive`, `sys.config.change`, `pkg.install`,
-  `shell.indirect_exec`, `fs.write.outside_project`. A policy overrides a
-  built-in by listing a capability whose `match` covers the command.
+  `shell.indirect_exec`, `fs.write.outside_project`,
+  `mcp.write_operation`. A policy overrides a built-in by listing a
+  capability whose `match` covers the command or tool.
+
+## MCP tools (schema 1.2)
+
+MCP tool names map to action classes as `mcp__<server>__<tool>` →
+`mcp.<server>.<tool>`. Matching uses two schema 1.2 `match` fields:
+
+- `tool_patterns` — fnmatch against the full tool name
+  (`mcp__postgres__query`). Never grant L4/L5 on a bare `mcp__*`.
+- `input_patterns` — per-field fnmatch against `tool_input`; every listed
+  field must exist and match (AND). Non-string values are matched against
+  their JSON serialization. **This is where an MCP capability's target
+  scope lives** — `bounds.targets` are not hook-verifiable for MCP, same
+  as for Bash.
+
+```yaml
+match:
+  tool_patterns: ["mcp__postgres__query"]
+  input_patterns:
+    query: "ANALYZE *"
+```
+
+Unlisted MCP tools with mutating-verb names (`create/delete/update/execute/
+push/send/...` — see `mcp.write_operation` in classifiers.json) route
+through `defaults.unknown_action`; read-only-verb tools (`get/list/read/
+search`) pass silently to the normal permission flow. Known limitations:
+self-protection (P1/P2) cannot see policy-file writes made through an MCP
+filesystem server, and an input-pattern mismatch means "not this
+capability", falling through to the classifier — encode broad enough
+`input_patterns` deliberately.
 
 ## Non-interactive mode (`claude -p`)
 

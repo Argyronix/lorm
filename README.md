@@ -98,8 +98,11 @@ python3 skills/lorm/scripts/validate_policy.py lorm-policy.yaml
   plugin's hooks make the authorization boundary deterministic. Neither
   claims to defeat a deliberately adversarial model — see the threat model
   in [`docs/hard-enforcement.md`](docs/hard-enforcement.md).
-- Next: MCP tool coverage, project-level classifier extensions, structured
-  machine-evaluable `conditions`.
+- MCP tools are gated since 2.2.0 (schema 1.2 `tool_patterns` /
+  `input_patterns`).
+- Next: trust-lifecycle tooling (audit-log analyzer proposing
+  promotions/demotions), executable `conditions[].check` commands,
+  project-level classifier extensions.
 
 ## License
 

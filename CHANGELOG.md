@@ -3,6 +3,29 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.2.0 — 2026-07-11
+
+MCP tool coverage.
+
+### Added
+- The enforcement hooks now gate MCP tools (`mcp__*`) alongside
+  Bash/Write/Edit; action-class mapping `mcp__<server>__<tool>` →
+  `mcp.<server>.<tool>`.
+- Policy schema **1.2**: `match.tool_patterns` (fnmatch vs the MCP tool
+  name) and `match.input_patterns` (per-field fnmatch vs `tool_input`,
+  AND semantics, non-strings matched via JSON serialization). Additive;
+  1.0/1.1 policies remain valid.
+- Built-in classifier `mcp.write_operation`: unlisted mutating-verb MCP
+  tools route through `defaults.unknown_action`; read-only verbs pass
+  through.
+- 10 new test cases (56 total).
+
+### Known limitations
+- P1/P2 self-protection cannot see policy-file writes made through MCP
+  filesystem servers.
+- `bounds.targets` are not hook-verifiable for MCP capabilities — the
+  target scope MUST be encoded in `input_patterns`.
+
 ## 2.1.0 — 2026-07-11
 
 Hard enforcement: the repository is now a Claude Code plugin.

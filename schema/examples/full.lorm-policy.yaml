@@ -1,7 +1,7 @@
-# Full LORM policy example: one L4 capability, two L5 capabilities,
-# hard-enforcement match blocks (schema 1.1), audit configuration,
-# and one active demotion.
-lorm_policy: "1.1"
+# Full LORM policy example: one L4 capability, three L5 capabilities
+# (one arriving via an MCP tool), hard-enforcement match blocks
+# (schema 1.1/1.2), audit configuration, and one active demotion.
+lorm_policy: "1.2"
 
 metadata:
   project: "acme-payments"
@@ -64,6 +64,34 @@ capabilities:
       on_failure:
         demote_to: L4
         notify: "oncall@acme.example"
+
+  # --- L5 via an MCP tool (schema 1.2 match fields): the target scope
+  # --- lives in input_patterns, not in bounds.targets ---
+  - id: mcp.postgres.analyze
+    description: "Run ANALYZE through the postgres MCP server"
+    level: L5
+    match:
+      tool_patterns: ["mcp__postgres__query", "mcp__postgres__execute"]
+      input_patterns:
+        query: "ANALYZE *"
+    policy:
+      version: 1
+      author: "alice@acme.example"
+      approved_by: "bob@acme.example"
+      approved_at: 2026-07-01
+      expires: 2026-10-01
+      tested: "staging soak 2026-06-20..27, 40 executions, 0 failures"
+    conditions:
+      - "table statistics older than 7 days"
+    bounds:
+      targets: ["prod/analytics_*"]
+      blast_radius:
+        max_objects: 5
+        max_actions_per_hour: 10
+    rollback: "none needed; ANALYZE only refreshes planner statistics"
+    verification:
+      expect: "last_analyze updated for target tables"
+      window: "5m"
 
   # --- L5 on paper, but currently demoted (see demotions[] below) ---
   - id: db.stats.analyze

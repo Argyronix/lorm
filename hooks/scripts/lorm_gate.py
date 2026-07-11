@@ -28,6 +28,10 @@ import shlex
 import sys
 
 GATED_TOOLS = {"Bash", "Write", "Edit"}
+
+
+def is_gated_tool(tool):
+    return tool in GATED_TOOLS or (isinstance(tool, str) and tool.startswith("mcp__"))
 POLICY_CANDIDATES = (
     "lorm-policy.yaml",
     "lorm-policy.json",
@@ -361,6 +365,39 @@ def cap_matches_path(cap, tool, rel_path):
     )
 
 
+def stringify_input_value(value):
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
+def cap_matches_mcp(cap, tool, tool_input):
+    """MCP matching (schema 1.2): tool_patterns vs the full tool name;
+    every input_patterns field must exist in tool_input and match (AND)."""
+    match = cap.get("match")
+    if not isinstance(match, dict):
+        return False
+    tool_patterns = match.get("tool_patterns") or []
+    if not tool_patterns or not any(
+        fnmatch.fnmatchcase(tool, pat) for pat in tool_patterns
+    ):
+        return False
+    for field, pattern in (match.get("input_patterns") or {}).items():
+        if field not in tool_input:
+            return False
+        if not fnmatch.fnmatchcase(stringify_input_value(tool_input[field]), pattern):
+            return False
+    return True
+
+
+def mcp_classifier_hit(classifiers, tool):
+    for entry in classifiers:
+        patterns = entry.get("tool_patterns") or []
+        if patterns and any(fnmatch.fnmatchcase(tool, p) for p in patterns):
+            return entry.get("capability")
+    return None
+
+
 def classifier_hit(classifiers, tool, texts, rel_path_outside):
     """First matching built-in classifier id, or None (order matters)."""
     for entry in classifiers:
@@ -501,7 +538,7 @@ def combine(decisions):
 
 def decide_pre(payload):
     tool = payload.get("tool_name")
-    if tool not in GATED_TOOLS:
+    if not is_gated_tool(tool):
         return None
     tool_input = payload.get("tool_input") or {}
     project_root = find_project_dir(payload)
@@ -522,16 +559,20 @@ def decide_pre(payload):
         if not command.strip():
             return None
         bash_texts, bash_segments = bash_match_texts(command)
-    else:
+    elif tool in ("Write", "Edit"):
         raw = tool_input.get("file_path") or ""
         if not raw:
             return None
         rel_path, _ = norm_path(raw, cwd, project_root)
         rel_outside = rel_path is None
+    # MCP tools (mcp__*) need no pre-extraction; matching is by tool name
+    # and input_patterns. Self-protection (P1/P2) is not evaluable for MCP
+    # filesystem servers — documented limitation in docs/hard-enforcement.md.
 
     decisions = [
         self_protection(tool, tool_input, bash_segments, cwd, project_root,
                         policy_path, audit_path)
+        if tool in GATED_TOOLS else None
     ]
     caps = [c for c in policy.get("capabilities") or [] if isinstance(c, dict)]
     classifiers = load_classifiers()
@@ -567,6 +608,16 @@ def decide_pre(payload):
                 hit = classifier_hit(classifiers, tool, [text], False)
                 if hit:
                     decisions.append(defaults_decision(hit))
+    elif tool.startswith("mcp__"):
+        caps_here = [c for c in caps if cap_matches_mcp(c, tool, tool_input)]
+        for cap in caps_here:
+            decisions.append(decide_for_capability(
+                cap, policy, tool, tool_input, None,
+                cwd, project_root, audit_path, now))
+        if not caps_here:
+            hit = mcp_classifier_hit(classifiers, tool)
+            if hit:
+                decisions.append(defaults_decision(hit))
     else:
         caps_here = [c for c in caps if cap_matches_path(c, tool, rel_path)]
         for cap in caps_here:
@@ -609,12 +660,14 @@ def append_audit(audit_path, record):
 def summarize_action(tool, tool_input):
     if tool == "Bash":
         return (tool_input.get("command") or "")[:300]
+    if tool.startswith("mcp__"):
+        return f"{tool} {json.dumps(tool_input, ensure_ascii=False)}"[:300]
     return f"{tool} {tool_input.get('file_path', '')}"[:300]
 
 
 def run_post(payload):
     tool = payload.get("tool_name")
-    if tool not in GATED_TOOLS:
+    if not is_gated_tool(tool):
         return
     tool_input = payload.get("tool_input") or {}
     project_root = find_project_dir(payload)
@@ -633,7 +686,7 @@ def run_post(payload):
         if not command.strip():
             return
         bash_texts, bash_segments = bash_match_texts(command)
-    else:
+    elif tool in ("Write", "Edit"):
         raw = tool_input.get("file_path") or ""
         if not raw:
             return
@@ -645,6 +698,8 @@ def run_post(payload):
     if tool == "Bash":
         matched = [c for c in caps
                    if any(cap_matches_text(c, tool, t) for t in bash_texts)]
+    elif tool.startswith("mcp__"):
+        matched = [c for c in caps if cap_matches_mcp(c, tool, tool_input)]
     else:
         matched = [c for c in caps if cap_matches_path(c, tool, rel_path)]
     if matched:
@@ -660,7 +715,10 @@ def run_post(payload):
             level = "L4"
             authorizer = f"human:session {payload.get('session_id', '?')}"
     else:
-        hit = classifier_hit(load_classifiers(), tool, bash_texts, rel_outside)
+        if tool.startswith("mcp__"):
+            hit = mcp_classifier_hit(load_classifiers(), tool)
+        else:
+            hit = classifier_hit(load_classifiers(), tool, bash_texts, rel_outside)
         if hit:
             capability = hit
             level = "L4"  # it executed, so a human approved it

@@ -1,6 +1,6 @@
 {
   "name": "lorm",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "LORM hard enforcement: PreToolUse authorization gate and PostToolUse audit trail driven by lorm-policy.yaml, plus the LORM agent skill (soft layer).",
   "author": {
     "name": "Argyronix",
