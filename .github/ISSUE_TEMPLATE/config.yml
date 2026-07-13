@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the user guide first
+    url: https://github.com/Argyronix/lorm/blob/main/docs/user-guide.md
+    about: Plain-language intro, worked scenarios, and an FAQ — many questions are answered here before you need to file anything.
+  - name: Report a security vulnerability
+    url: https://github.com/Argyronix/lorm/security/policy
+    about: Use this for anything that lets a gated action execute without the authorization LORM claims for it. Do not open a public issue for these.
