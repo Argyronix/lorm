@@ -78,11 +78,15 @@ conversation. LORM is complementary rather than competing: it grades the
 
 ### Self-driving databases
 
-In database operations specifically — LORM's domain of origin — no public
-leveled taxonomy exists. Oracle markets its Autonomous Database via the
-self-driving-car analogy without a formal level model; the academic
-self-driving-DBMS line (Pavlo et al.) focuses on capability, not
-authorization. This niche is open.
+In database operations specifically — LORM's domain of origin — leveled
+taxonomies have begun to appear. Postgres.AI's *Self-Driving Postgres*
+(Samokhvalov, 2025) applies an SAE-J3016-style L0–L5 scale per operational area
+(~25 areas: vacuum, bloat, indexes, config…), grading degree of automation
+rather than authorization and specifying no delegation artifact and no trust
+lifecycle. Oracle markets its Autonomous Database via the self-driving-car
+analogy without a formal level model; the academic self-driving-DBMS line
+(Pavlo et al.) focuses on capability, not authorization. The leveled-*notation*
+niche is now occupied; the authorization-axis niche LORM defines is not.
 
 ## What LORM adds
 
