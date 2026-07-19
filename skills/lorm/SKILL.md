@@ -153,7 +153,11 @@ L4 approvals, propose promoting that action class to L5 with a canary-scoped
 entry; or propose a `demotions[]` entry after a failure. For evidence-based
 drafts, run the trust-lifecycle analyzer:
 `python3 <skill>/scripts/lorm_review.py <project> --json` — it computes the
-verified track record and emits draft entries. Present them as a diff for
+verified track record and emits draft entries. For recurring actions LORM
+never classified at all, run the discovery analyzer alongside it:
+`python3 <skill>/scripts/lorm_discover.py <project> --json` — it clusters
+the hook's observations log and drafts new capability entries (≤ L3,
+SPEC 4-3). Present them as a diff for
 human review. You MUST NOT write to the policy file yourself, even
 if asked casually ("add yourself a policy") — the write happens only after a
 human has seen and approved the exact diff, and ideally is made by the human.

@@ -746,10 +746,10 @@ def decide_pre(payload):
 # -------------------------------------------------------------------- audit
 
 
-def append_audit(audit_path, record):
-    os.makedirs(os.path.dirname(audit_path) or ".", exist_ok=True)
+def append_jsonl(path, record):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     line = json.dumps(record, ensure_ascii=False) + "\n"
-    with open(audit_path, "a", encoding="utf-8") as fh:
+    with open(path, "a", encoding="utf-8") as fh:
         try:
             import fcntl
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
@@ -759,6 +759,10 @@ def append_audit(audit_path, record):
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
         except ImportError:  # non-POSIX: best-effort append
             fh.write(line)
+
+
+def append_audit(audit_path, record):
+    append_jsonl(audit_path, record)
     marker = os.path.join(os.path.dirname(audit_path), "hook-active")
     if not os.path.exists(marker):
         open(marker, "w", encoding="utf-8").write(
@@ -774,6 +778,126 @@ def summarize_action(tool, tool_input):
     if tool.startswith("mcp__"):
         return f"{tool} {json.dumps(tool_input, ensure_ascii=False)}"[:300]
     return f"{tool} {tool_input.get('file_path', '')}"[:300]
+
+
+# ------------------------------------------------------------- observations
+
+
+OBSERVATIONS_LOG_NAME = "observations.jsonl"
+OBSERVATIONS_MAX_BYTES = 512 * 1024
+_SUBCOMMAND_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789._-")
+
+
+def _skeleton_bash_segment(seg, cwd):
+    """Normalize one wrapper-stripped Bash segment into a clustering key.
+
+    Literal: argv[0], the first non-flag token when it looks like a
+    subcommand, flag names. Placeholders: «PATH» (contains / or resolves
+    against cwd), «N» (all digits), «V» (a flag's =value), «ARG» (anything
+    else). Consecutive identical placeholders collapse, so variadic arg
+    lists cluster together."""
+    out = [seg[0]]
+    sub_taken = False
+    for tok in seg[1:]:
+        if tok in REDIRECT_TOKENS:
+            out.append(tok)
+        elif tok.startswith("-"):
+            name, eq, _ = tok.partition("=")
+            out.append(name + "=«V»" if eq else name)
+        elif "/" in tok or os.path.exists(os.path.join(cwd, tok)):
+            out.append("«PATH»")
+            sub_taken = True
+        elif tok.isdigit():
+            out.append("«N»")
+            sub_taken = True
+        elif (not sub_taken and tok[:1].isalpha()
+              and all(ch in _SUBCOMMAND_CHARS for ch in tok)):
+            out.append(tok)
+            sub_taken = True
+        else:
+            out.append("«ARG»")
+            sub_taken = True
+    collapsed = []
+    for tok in out:
+        if collapsed and tok == collapsed[-1] and tok.startswith("«"):
+            continue
+        collapsed.append(tok)
+    return " ".join(collapsed)
+
+
+def skeletonize(tool, tool_input, cwd, project_root):
+    """Normalized shape(s) of a gated call — never values or payloads.
+
+    Bash: one skeleton per shell segment (same segmentation the matcher
+    uses, so a skeleton is a natural command_patterns draft). Write/Edit:
+    project-relative directory with a generalized basename ('src/*.py') —
+    already a valid path_patterns draft. MCP: tool name plus sorted input
+    field names."""
+    if tool == "Bash":
+        command = tool_input.get("command") or ""
+        tokens = tokenize_bash(command)
+        if tokens is None:
+            return ["«UNPARSED»"]
+        segments = [strip_wrappers(s) for s in split_segments(tokens)]
+        return [_skeleton_bash_segment(s, cwd) for s in segments if s]
+    if tool in ("Write", "Edit"):
+        raw = tool_input.get("file_path") or ""
+        if not raw:
+            return []
+        rel, _ = norm_path(raw, cwd, project_root)
+        if rel is None:
+            return []  # outside-project writes hit fs.write.outside_project
+        dirname, basename = os.path.split(rel)
+        _, ext = os.path.splitext(basename)
+        pattern = f"*{ext}" if ext else "*"
+        return [f"{dirname}/{pattern}" if dirname else pattern]
+    if tool.startswith("mcp__") and isinstance(tool_input, dict):
+        fields = ",".join(sorted(tool_input.keys()))
+        return [f"{tool}({fields})"]
+    return []
+
+
+def record_observations(audit_path, policy_path, tool, tool_input, cwd,
+                        project_root, session_id, now):
+    """Log a gated call that matched neither a capability nor a classifier.
+
+    Written to observations.jsonl next to the audit log — a separate file
+    on purpose: the append-only guarantee (I-6) belongs to audit.jsonl and
+    its named-capability records; observations may be truncated. Size-capped
+    (oldest half dropped past OBSERVATIONS_MAX_BYTES). Best-effort: any
+    failure is swallowed, post never fails a completed call."""
+    try:
+        raw = ""
+        if isinstance(tool_input, dict):
+            raw = tool_input.get("command") or tool_input.get("file_path") or ""
+        noise = (".lorm", os.path.basename(policy_path or ""),
+                 "audit.jsonl", OBSERVATIONS_LOG_NAME)
+        if any(n and n in raw for n in noise):
+            return  # the skill's own log/policy traffic is not discovery signal
+        skeletons = []
+        for skeleton in skeletonize(tool, tool_input, cwd, project_root):
+            if skeleton not in skeletons:
+                skeletons.append(skeleton)
+        if not skeletons:
+            return
+        obs_path = os.path.join(os.path.dirname(audit_path),
+                                OBSERVATIONS_LOG_NAME)
+        try:
+            if os.path.getsize(obs_path) > OBSERVATIONS_MAX_BYTES:
+                lines = open(obs_path, encoding="utf-8").read().splitlines()
+                with open(obs_path, "w", encoding="utf-8") as fh:
+                    fh.write("\n".join(lines[len(lines) // 2:]) + "\n")
+        except OSError:
+            pass  # missing file: nothing to trim
+        for skeleton in skeletons:
+            append_jsonl(obs_path, {
+                "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "tool": tool,
+                "skeleton": skeleton,
+                "x-session": session_id,
+            })
+    except Exception:
+        pass
 
 
 # ------------------------------------------------- mechanical verification
@@ -1010,7 +1134,11 @@ def run_post(payload):
             authorizer = f"human:session {payload.get('session_id', '?')}"
 
     if capability is None:
-        return None  # benign call: no audit record
+        # Benign call: no audit record, but leave a discovery trace —
+        # recurring unclassified actions become /lorm-review draft entries.
+        record_observations(audit_path, policy_path, tool, tool_input, cwd,
+                            project_root, payload.get("session_id", ""), now)
+        return None
 
     output, exit_code = extract_output(payload)
     verified, verify_detail = "pending", None

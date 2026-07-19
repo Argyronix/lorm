@@ -221,6 +221,29 @@ trust-lifecycle progress passively: when a capability's unsuperseded
 one-line `systemMessage` says so — no more discovering a 69/69-pending
 backlog only by explicitly running `/lorm-review`.
 
+## Observations log (discovery)
+
+Gated calls that match **neither** a policy capability **nor** a built-in
+classifier still pass silently to the normal permission flow — but since
+2.6.0 they leave a discovery trace in `.lorm/observations.jsonl` (next to
+the audit log): timestamp, tool, a normalized *skeleton* of the call, and
+the session id. Never values or payloads — `git commit -m "fix the thing"`
+is recorded as `git commit -m «ARG»`; a Write of `src/components/Button.tsx`
+as `src/*.tsx`; an MCP call as its tool name plus sorted input field names.
+
+Unlike `audit.jsonl`, this file carries **no append-only guarantee** —
+that guarantee (I-6, P2 self-protection) is tied to named-capability
+execution/verification records. Observations are best-effort and
+size-capped: past 512 KiB the oldest half is dropped on the next append
+(≈ months of routine use). The skill's own log/policy traffic is filtered
+out as non-signal.
+
+The consumer is `skills/lorm/scripts/lorm_discover.py` (run by
+`/lorm:lorm-review`): it clusters observations by (tool, skeleton) and,
+above a repetition threshold, drafts a capability entry — entering at L3
+per SPEC 4-3, with the skeleton converted to a `match` block and an
+explicit verification-gap note. Drafts only, never applied (I-8).
+
 ## Non-interactive mode (`claude -p`)
 
 `ask` cannot be answered headlessly, so the call is not executed and the
@@ -246,7 +269,7 @@ executed, a human approved it.
 ## Testing
 
 ```bash
-python3 tests/run_tests.py     # 86 assertions across ~14 scenario groups
+python3 tests/run_tests.py     # 104 assertions across ~16 scenario groups
 ```
 
 Live smoke test: create a scratch project with a `defaults.unknown_action:

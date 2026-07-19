@@ -911,12 +911,182 @@ def test_mechanical_verification():
     shutil.rmtree(p4)
 
 
+DISCOVER = os.path.join(REPO, "skills", "lorm", "scripts", "lorm_discover.py")
+
+
+def read_observations(project):
+    path = os.path.join(project, ".lorm", "observations.jsonl")
+    if not os.path.exists(path):
+        return []
+    return [json.loads(l) for l in open(path).read().splitlines() if l.strip()]
+
+
+def post(command_or_path, project, tool="Bash"):
+    if tool == "Bash":
+        payload = bash_payload(command_or_path, project)
+    else:
+        payload = write_payload(command_or_path, project, tool=tool)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_output"] = "ok"
+    return run_gate_post(payload, project)
+
+
+def test_observations():
+    print("observations log (unclassified actions)")
+    p = make_project(BASE_L5)
+    audit = os.path.join(p, ".lorm", "audit.jsonl")
+
+    # unmatched benign Bash -> observation, no audit record
+    rc, msg, err = post("git status", p)
+    obs = read_observations(p)
+    check("unmatched bash -> observation with skeleton",
+          len(obs) == 1 and obs[0]["tool"] == "Bash"
+          and obs[0]["skeleton"] == "git status", f"{obs} {err}")
+    check("unmatched bash -> no audit record", not os.path.exists(audit), "")
+
+    # skeleton stability: differing literals cluster to one shape
+    post('git commit -m "first message"', p)
+    post('git commit -m "a totally different one"', p)
+    obs = read_observations(p)
+    skels = [o["skeleton"] for o in obs[-2:]]
+    check("differing literals -> identical skeletons",
+          skels[0] == skels[1] == "git commit -m «ARG»", str(skels))
+
+    # matched capability -> audit record, no observation
+    n_before = len(read_observations(p))
+    post("rm -rf build", p)
+    check("matched call -> audit record, no observation",
+          os.path.exists(audit) and len(read_observations(p)) == n_before, "")
+
+    # classifier hit -> audit record, no observation
+    post("rm data.txt", p)
+    check("classifier hit -> audit record, no observation",
+          len(open(audit).read().splitlines()) == 2
+          and len(read_observations(p)) == n_before, "")
+
+    # in-project Write -> path skeleton
+    os.makedirs(os.path.join(p, "src"), exist_ok=True)
+    post("src/x.py", p, tool="Write")
+    obs = read_observations(p)
+    check("in-project write -> dir/*.ext skeleton",
+          obs[-1]["tool"] == "Write" and obs[-1]["skeleton"] == "src/*.py",
+          str(obs[-1]))
+
+    # self-noise: commands touching .lorm/ or the policy file are not signal
+    n_before = len(read_observations(p))
+    post("cat .lorm/audit.jsonl", p)
+    post("cat lorm-policy.yaml", p)
+    check(".lorm/policy traffic -> no observation",
+          len(read_observations(p)) == n_before, "")
+
+    # MCP read-only unlisted tool -> field-name skeleton
+    payload = {"session_id": "test-session", "cwd": p,
+               "hook_event_name": "PostToolUse",
+               "tool_name": "mcp__github__get_issue",
+               "tool_input": {"repo": "a/b", "number": 7},
+               "tool_output": "ok"}
+    run_gate_post(payload, p)
+    obs = read_observations(p)
+    check("unlisted MCP tool -> name+field skeleton",
+          obs[-1]["skeleton"] == "mcp__github__get_issue(number,repo)",
+          str(obs[-1]))
+    shutil.rmtree(p)
+
+    # no policy file -> no observations at all
+    p2 = make_project(None)
+    post("git status", p2)
+    check("no policy -> no observations", read_observations(p2) == [], "")
+    shutil.rmtree(p2)
+
+    # size cap: oversized log is halved before append, newest kept
+    p3 = make_project(BASE_L5)
+    obs_path = os.path.join(p3, ".lorm", "observations.jsonl")
+    os.makedirs(os.path.dirname(obs_path), exist_ok=True)
+    filler = {"timestamp": "2026-01-01T00:00:00Z", "tool": "Bash",
+              "skeleton": "filler " + "x" * 100, "x-session": "old"}
+    line = json.dumps(filler, ensure_ascii=False)
+    n_lines = (600 * 1024) // (len(line) + 1)
+    with open(obs_path, "w") as fh:
+        for _ in range(n_lines):
+            fh.write(line + "\n")
+    post("git status", p3)
+    lines = open(obs_path).read().splitlines()
+    check("oversized log halved, newest appended",
+          len(lines) <= n_lines // 2 + 2
+          and json.loads(lines[-1])["skeleton"] == "git status",
+          f"{n_lines} -> {len(lines)}")
+    shutil.rmtree(p3)
+
+
+def seed_observations(project, rows):
+    os.makedirs(os.path.join(project, ".lorm"), exist_ok=True)
+    with open(os.path.join(project, ".lorm", "observations.jsonl"), "a") as fh:
+        for tool, skeleton, age_days, session in rows:
+            ts = (datetime.datetime.now(datetime.timezone.utc)
+                  - datetime.timedelta(days=age_days))
+            fh.write(json.dumps({
+                "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "tool": tool, "skeleton": skeleton,
+                "x-session": session}) + "\n")
+
+
+def run_discover(project, *extra):
+    proc = subprocess.run(
+        [sys.executable, DISCOVER, project, "--json", *extra],
+        capture_output=True, text=True, timeout=30)
+    if proc.returncode != 0:
+        return None, proc.stderr
+    return json.loads(proc.stdout), proc.stderr
+
+
+def test_discover():
+    print("discovery analyzer")
+    p = make_project(BASE_L5)
+    seed_observations(p, [
+        *[("Bash", "git commit -m «ARG»", 1, f"s{i % 3}") for i in range(6)],
+        ("Bash", "curl -s «ARG»", 2, "s1"),
+        ("Bash", "curl -s «ARG»", 3, "s1"),
+        *[("Bash", "make «ARG»", 90, "s1") for _ in range(5)],
+        *[("Write", "src/*.py", 1, "s1") for _ in range(3)],
+        *[("Edit", "src/*.py", 2, "s2") for _ in range(3)],
+    ])
+    out, err = run_discover(p)
+    check("discover runs", out is not None, err)
+    props = {tuple(c["tools"]): c for c in out["proposals"]}
+    git = props.get(("Bash",))
+    check("cluster above threshold -> proposal (out-of-window ignored)",
+          git is not None and git["skeleton"] == "git commit -m «ARG»"
+          and git["count"] == 6, str(list(props)))
+    check("draft: L3, derived pattern, both notes",
+          git["draft"]["level"] == "L3"
+          and git["draft"]["match"]["command_patterns"] == ["git commit -m *"]
+          and "VERIFICATION GAP" in git["draft"]["x-note-verification"]
+          and "DENY" in git["draft"]["x-note-level"], str(git["draft"]))
+    check("draft id derived from skeleton",
+          git["draft"]["id"] == "cmd.git.commit", git["draft"]["id"])
+    we = props.get(("Edit", "Write"))
+    check("Write+Edit same skeleton merge into one cluster",
+          we is not None and we["count"] == 6
+          and we["draft"]["match"]["path_patterns"] == ["src/*.py"],
+          str(list(props)))
+    check("session spread counted", git["sessions"] == 3, str(git))
+
+    out, _ = run_discover(p, "--min-count", "10")
+    check("--min-count respected", out["proposals"] == [], str(out["proposals"]))
+    out, _ = run_discover(p, "--window", "365", "--min-count", "5")
+    counts = {c["skeleton"]: c["count"] for c in out["proposals"]}
+    check("--window widens: old cluster appears",
+          counts.get("make «ARG»") == 5, str(counts))
+    shutil.rmtree(p)
+
+
 def main():
     for fn in (test_passive, test_l5_allow_and_degrades, test_rate_limit,
                test_l4_l3_and_defaults, test_compound_and_wrappers,
                test_write_paths, test_self_protection, test_fail_closed,
                test_post_audit, test_mcp, test_executable_conditions,
-               test_review, test_multi_cap, test_mechanical_verification):
+               test_review, test_multi_cap, test_mechanical_verification,
+               test_observations, test_discover):
         fn()
     print(f"\n{PASS} passed, {len(FAIL)} failed")
     if FAIL:

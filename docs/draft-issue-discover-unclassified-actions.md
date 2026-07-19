@@ -1,10 +1,13 @@
 # [Draft — not yet filed] Detect and propose tracking for recurring unclassified actions
 
-*Unfiled GitHub issue draft, following `.github/ISSUE_TEMPLATE/feature_request.md`.
-Written up 2026-07-18 during the same dogfooding session as
-`draft-issue-mechanical-verification.md`. File to
-https://github.com/Argyronix/lorm/issues when ready — until then this is a
-local record only.*
+*Written up 2026-07-18 during the same dogfooding session as
+`draft-issue-mechanical-verification.md`, following
+`.github/ISSUE_TEMPLATE/feature_request.md`.*
+
+***Status: implemented in plugin v2.6.0 (2026-07-19 — see CHANGELOG),
+after the mechanical-verification companion landed in v2.5.0 per the
+dependency below. Retained as the design record; file upstream only if
+divergence is found.***
 
 **Affected layer:**
 - [x] hooks/ (enforcement engine, classifiers) — new passive logging stream

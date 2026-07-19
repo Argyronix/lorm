@@ -27,6 +27,7 @@ analyzer and presents the drafts as reviewable diffs.
 | **Demotion proposals** | failed verification with no active demotion (SPEC 6-5) | Draft `demotions[]` entry naming the failure |
 | **Expiry** | L5 policy expired or expiring ≤ 14d (SPEC 8-2) | Renewal reminder with the verification summary a renewal review needs |
 | **Hygiene** | executions ≥ track but verification coverage too low (I-7); recurring approvals with no policy entry; corrupt audit lines | What blocks the lifecycle from progressing, and why |
+| **Discovery** (`lorm_discover.py`, 2.6.0+) | recurring *unclassified* actions — calls no capability or classifier ever saw, clustered from `.lorm/observations.jsonl` by normalized shape | Draft capability entry at ≤ L3 (SPEC 4-3) with a derived `match` block and a verification-gap note |
 
 Two properties worth noting:
 
@@ -59,6 +60,10 @@ filled by humans.
 hook/skill execute → audit log accumulates → /lorm-review
       → human applies promotion/demotion diffs → policy evolves
       → hook enforces the new levels → …
+
+unclassified calls → observations accumulate → /lorm-review (discovery)
+      → human registers the class at ≤ L3/L4 → audit tracking begins
+      → verification builds the track record → promotion path above
 ```
 
 Run it on a cadence (weekly, or before policy renewals). A "steady state"

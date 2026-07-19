@@ -3,6 +3,36 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.6.0 — 2026-07-19
+
+Discovery — actions LORM never saw now leave a trace and become draft
+policy. Design record: `docs/draft-issue-discover-unclassified-actions.md`
+(companion to 2.5.0's mechanical verification; shipped second so
+newly-discovered capabilities can point at the verification fix instead
+of inheriting the gap).
+
+### Added
+- Passive observations log `.lorm/observations.jsonl`: gated calls
+  matching neither a policy capability nor a built-in classifier are
+  recorded as (timestamp, tool, skeleton, session) — normalized shape
+  only, never values or payloads (`git commit -m "fix"` →
+  `git commit -m «ARG»`; a Write of `src/x.py` → `src/*.py`; MCP → tool
+  name + sorted input field names). Size-capped at 512 KiB with
+  oldest-half truncation; carries no append-only guarantee (that remains
+  audit.jsonl's). The skill's own log/policy traffic is filtered out.
+- `skills/lorm/scripts/lorm_discover.py`: clusters observations by
+  (tool, skeleton) within `--window` (default 30d) and, at or above
+  `--min-count` (default 5), emits draft capability entries — entering at
+  L3 per SPEC 4-3, skeleton converted to a `match` block, with explicit
+  notes on L3-deny semantics and the verification gap (add
+  `verification.expect` / schema-1.4 `mechanical`). Drafts only, never
+  applied (I-8).
+- `/lorm:lorm-review` now runs both analyzers and reports a discovery
+  section alongside promotions/demotions/expiry/hygiene.
+- SPEC.md 2.0.2: informative note after §4-3 (registration presupposes
+  noticing; shape-only passive recording; I-8).
+- 18 new tests (104 total).
+
 ## 2.5.0 — 2026-07-19
 
 Mechanical verification — deterministically checkable outcomes no longer

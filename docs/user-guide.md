@@ -181,6 +181,14 @@ flags capabilities whose track record is too unverified to ever promote.
 Want to revoke *right now* without ceremony? Delete the capability entry
 from the policy file — the next action falls back to L4 immediately.
 
+The review also surfaces what LORM never saw (2.6.0+): actions matching
+neither a capability nor a built-in classifier leave a normalized,
+payload-free trace in `.lorm/observations.jsonl`, and recurring shapes
+come back as draft capability entries — so a routine action you've
+approved thirty times gets *proposed* for the registry instead of staying
+invisible forever. You still register it yourself; drafts are never
+self-applied (SPEC I-8).
+
 ## Scenario 6 — "add yourself a policy"
 
 If you (or anyone) casually tell the agent to grant itself permissions,

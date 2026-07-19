@@ -5,13 +5,14 @@ description: Review the LORM trust lifecycle — analyze the audit log and prese
 Run the LORM trust-lifecycle review for the current project and present
 the results to the user.
 
-1. Execute:
+1. Execute both analyzers:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/lorm/scripts/lorm_review.py" "$PWD" --json
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/lorm/scripts/lorm_discover.py" "$PWD" --json
 ```
 
-(If `CLAUDE_PLUGIN_ROOT` is not set in your shell, locate the script under
+(If `CLAUDE_PLUGIN_ROOT` is not set in your shell, locate the scripts under
 the installed plugin or `.claude/skills/lorm/scripts/`.)
 
 2. Interpret the JSON and report to the user, in this order:
@@ -26,7 +27,15 @@ the installed plugin or `.claude/skills/lorm/scripts/`.)
      failures behind them;
    - **expiry warnings** and **hygiene findings** — including low
      verification coverage (the reason a capability cannot be promoted,
-     SPEC I-7).
+     SPEC I-7);
+   - **discovery — recurring unclassified actions** (from
+     `lorm_discover.py`): for each proposed cluster show the count, window
+     and session spread, and the draft capability entry. Point out the two
+     notes every draft carries: an applied L3 entry makes the hook DENY the
+     formerly-silent action (raise to L4 consciously for the approval
+     dialog plus audit tracking), and the verification gap (add
+     `verification.expect` / a schema-1.4 `mechanical` block so the new
+     entry does not accumulate `pending` records from day one).
 
 3. LORM I-8 applies to you: you MUST NOT write any of these drafts into
    `lorm-policy.yaml` yourself. Offer the diff; the human applies it (or

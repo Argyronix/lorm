@@ -1,6 +1,6 @@
 # LORM — Layered Operational Responsibility Model
 
-**Specification, version 2.0.1**
+**Specification, version 2.0.2**
 
 LORM defines six progressive levels of operational responsibility (L0–L5) for
 systems — AI-driven or conventional — that participate in operational
@@ -236,6 +236,13 @@ Consequences:
 ("an L5 product") and blanket distrust ("no autonomy anywhere"). A mature
 system typically runs most capabilities at L3–L4 and a small, well-measured
 set at L5.
+
+*[Informative]* Registration presupposes noticing: an action class the
+consumer cannot classify never enters the registry on its own. A consumer
+MAY passively record the *shape* of recurring unclassified actions (never
+their payloads) and propose draft registry entries above a repetition
+threshold. Proposals follow I-8 — the human registers; the entry level
+follows 4-3.
 
 ---
 
