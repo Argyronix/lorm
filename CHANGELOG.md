@@ -3,6 +3,39 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.5.0 — 2026-07-19
+
+Mechanical verification — deterministically checkable outcomes no longer
+depend on the agent remembering to verify. Design record:
+`docs/draft-issue-mechanical-verification.md` (dogfooding evidence:
+`fs.write.outside_project`, 69/69 executions stuck `pending`).
+
+### Added
+- Policy schema **1.4**: optional `verification.mechanical.checks[]` —
+  `file_exists` / `file_contains` / `output_contains` / `exit_code`,
+  evaluated by the PostToolUse hook immediately after execution. All pass
+  ⇒ the audit record is written `verified` (with
+  `x-verified-by: "lorm-hook-mechanical"`); any fail ⇒ `failed`, feeding
+  the existing demotion path; a check that cannot be evaluated leaves the
+  record `pending` (agent path unchanged). Fixed vocabulary by design —
+  not an expression language. `$TOOL_FILE` token references the
+  Write/Edit file_path.
+- Exit-code recovery from dict-shaped `tool_response` payloads (multiple
+  Claude Code field spellings probed; `interrupted`/`is_error` count as
+  failed; unknown ⇒ pending). Bash `outcome` and `output_contains` now
+  see stderr as well as stdout.
+- Passive pending-verification surfacing: the post hook emits a
+  `systemMessage` on mechanical verification failure, and when a
+  capability's unsuperseded pending count reaches exactly 10/25/50/100
+  with zero verified — stalled trust-lifecycle progress no longer waits
+  for someone to run `/lorm-review`.
+- `validate_policy.py` warnings: `exit_code` on a non-Bash-matched
+  capability; `mechanical` combined with a non-trivial
+  `verification.window`.
+- SPEC.md 2.0.1: informative note after §10.1 (the verifier need not be
+  an agent when the outcome is deterministically checkable).
+- 13 new tests (86 total).
+
 ## 2.4.2 — 2026-07-11
 
 ### Fixed

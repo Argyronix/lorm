@@ -1,8 +1,9 @@
-# Full LORM policy example: one L4 capability, three L5 capabilities
+# Full LORM policy example: two L4 capabilities, three L5 capabilities
 # (one arriving via an MCP tool), hard-enforcement match blocks
 # (schema 1.1/1.2), an executable condition check (schema 1.3),
-# audit configuration, and one active demotion.
-lorm_policy: "1.3"
+# mechanical verification checks (schema 1.4), audit configuration,
+# and one active demotion.
+lorm_policy: "1.4"
 
 metadata:
   project: "acme-payments"
@@ -32,6 +33,25 @@ capabilities:
     verification:
       expect: "query latency on the target table does not regress > 10%"
       window: "30m"
+
+  # --- L4 with mechanical verification (schema 1.4): the success criterion
+  # --- is fully checkable by the hook immediately after execution, so the
+  # --- audit record is written verified/failed without an agent step ---
+  - id: fs.write.migrations
+    description: "Author SQL migration files"
+    level: L4
+    match:
+      tools: [Write, Edit]
+      path_patterns: ["migrations/*.sql"]
+    bounds:
+      targets: ["migrations/*"]
+    rollback: "git checkout -- migrations/"
+    verification:
+      expect: "migration file exists and carries the end marker"
+      mechanical:                 # $TOOL_FILE = the Write/Edit file_path;
+        checks:                   # all pass => verified, any fail => failed,
+          - file_exists: "$TOOL_FILE"     # unevaluable => stays pending
+          - file_contains: {path: "$TOOL_FILE", substring: "-- migration end"}
 
   # --- L5: policy authorizes; full delegation metadata is REQUIRED ---
   - id: cache.flush

@@ -171,6 +171,56 @@ Checks run only after the cheaper validity checks (expiry, demotion,
 targets, rate) have passed. Plain-string conditions remain the skill's
 duty and are noted as such in the `allow` reason.
 
+## Mechanical verification (schema 1.4)
+
+For capabilities whose success criterion is deterministically checkable
+from data the hook already has, `verification.mechanical` lets the
+PostToolUse path write `verified`/`failed` itself instead of leaving every
+record `pending` for an agent step that may never run:
+
+```yaml
+verification:
+  expect: "migration file exists and carries the end marker"
+  mechanical:
+    checks:
+      - file_exists: "$TOOL_FILE"          # the Write/Edit file_path
+      - file_contains: {path: "$TOOL_FILE", substring: "-- migration end"}
+      - output_contains: "0 errors"        # substring of the tool's output
+      - exit_code: 0                       # Bash only
+```
+
+Semantics — fixed vocabulary, implicit AND, deliberately **not** an
+expression language (same posture as the no-conditions-DSL invariant):
+
+- **All checks pass** → the execution record is written
+  `verified: "verified"` with `x-verified-by: "lorm-hook-mechanical"` and
+  a short `x-verify-detail`.
+- **Any check fails** → `verified: "failed"` (feeding the existing
+  demotion path in `/lorm-review`) and the hook emits a `systemMessage`
+  naming the capability — a failed verification is a demotion trigger
+  (SPEC 6-5).
+- **A check that cannot be evaluated** (exit code not recoverable from
+  this Claude Code version's payload, unreadable file, `$TOOL_FILE` on a
+  tool without `file_path`) counts as *unknown*: no failures + any unknown
+  leaves the record `pending` — exactly today's agent-verified path,
+  never worse.
+
+Caveats: the exit code is recoverable only for Bash and only when the
+payload carries it (`interrupted`/`is_error` responses count as failed);
+for MCP tools `exit_code` is always unknown. Mechanical checks run
+immediately — a capability whose `verification.window` is non-trivial
+(e.g. "30m") is not mechanically confirmable; keep it agent-verified
+(`validate_policy.py` warns on the combination). Mechanical checks apply
+only to policy-matched capabilities, never bare classifier hits — register
+the capability in the policy to use them. Bash `outcome`/`output_contains`
+now see stderr as well as stdout.
+
+Independently of `mechanical`, the post hook surfaces stalled
+trust-lifecycle progress passively: when a capability's unsuperseded
+`pending` count reaches exactly 10, 25, 50, or 100 with zero verified, a
+one-line `systemMessage` says so — no more discovering a 69/69-pending
+backlog only by explicitly running `/lorm-review`.
+
 ## Non-interactive mode (`claude -p`)
 
 `ask` cannot be answered headlessly, so the call is not executed and the
@@ -183,9 +233,11 @@ approver via `--permission-prompt-tool`.
 ## Audit records and the skill
 
 PostToolUse appends one execution record per gated call that matched a
-capability or classifier (`x-writer: "lorm-hook"`, `verified: "pending"`,
+capability or classifier (`x-writer: "lorm-hook"`,
 `diagnosis_ref: "unavailable-to-hook"` — the hook cannot see the model's
-reasoning). The skill then appends *verification records* (`x-verifies`)
+reasoning). `verified` is `"pending"` unless the capability declares
+`verification.mechanical` checks the hook could evaluate (see above).
+The skill then appends *verification records* (`x-verifies`)
 after checking outcomes; see `skills/lorm/references/policy-format.md`.
 Records for actions the hook could not attribute to a valid L5 entry are
 written as `level: "L4", authorizer: "human:session <id>"` — if it
@@ -194,7 +246,7 @@ executed, a human approved it.
 ## Testing
 
 ```bash
-python3 tests/run_tests.py     # 46 assertions across ~10 scenario groups
+python3 tests/run_tests.py     # 86 assertions across ~14 scenario groups
 ```
 
 Live smoke test: create a scratch project with a `defaults.unknown_action:

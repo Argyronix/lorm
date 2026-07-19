@@ -128,6 +128,10 @@ depth of diagnostics, never their existence.
   would double-count against rate limits). Append only a *verification
   record* after checking the outcome (format:
   [references/policy-format.md](references/policy-format.md)).
+- If the hook already verified the record mechanically
+  (`x-verified-by: "lorm-hook-mechanical"`, schema 1.4), verification is
+  done — skip this step for that record unless you have contrary evidence,
+  in which case append a superseding verification record.
 - Otherwise (no hook), append the full execution record yourself with the
   fields listed in `audit.record_fields`.
 - A failed verification on an L5 action: stop further executions of that

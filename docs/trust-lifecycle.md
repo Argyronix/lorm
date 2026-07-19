@@ -37,6 +37,14 @@ Two properties worth noting:
   finding instead of a promotion. This is I-7 applied to the tooling
   itself: unverifiable history earns nothing.
 
+Two mechanisms keep the pending problem from festering silently (both
+plugin 2.5.0+): capabilities with schema-1.4 `verification.mechanical`
+checks accumulate `verified`/`failed` track record directly from the hook,
+with no agent step involved; and when a capability's unsuperseded pending
+count reaches 10/25/50/100 with zero verified, the post hook emits a
+one-line `systemMessage` — you learn that lifecycle progress has stalled
+without having to run this review first.
+
 ## Propose, never enact
 
 The analyzer prints drafts; it does not modify `lorm-policy.yaml`, and the

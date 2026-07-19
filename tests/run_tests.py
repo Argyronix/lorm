@@ -41,6 +41,22 @@ def run_gate(mode, payload, project, extra_env=None):
     return proc.returncode, decision, reason, proc.stderr
 
 
+def run_gate_post(payload, project, extra_env=None):
+    """Post-mode runner: returns (returncode, systemMessage_or_None, stderr)."""
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=project, CLAUDE_PLUGIN_ROOT=REPO)
+    if extra_env:
+        env.update(extra_env)
+    proc = subprocess.run(
+        [sys.executable, GATE, "post"],
+        input=json.dumps(payload), capture_output=True, text=True, env=env,
+        timeout=30,
+    )
+    message = None
+    if proc.stdout.strip():
+        message = json.loads(proc.stdout).get("systemMessage")
+    return proc.returncode, message, proc.stderr
+
+
 def bash_payload(command, project, cwd=None):
     return {"session_id": "test-session", "cwd": cwd or project,
             "hook_event_name": "PreToolUse", "tool_name": "Bash",
@@ -724,12 +740,183 @@ def test_multi_cap():
     shutil.rmtree(p2)
 
 
+MECH_WRITE = """\
+lorm_policy: "1.4"
+metadata: {project: test, owner: owner@example.com}
+defaults: {max_level: L3, unknown_action: escalate}
+capabilities:
+  - id: fs.write.notes
+    level: L4
+    match:
+      tools: [Write, Edit]
+      path_patterns: ["notes/*"]
+    bounds: {targets: ["notes/*"]}
+    verification:
+      expect: "file written with the marker"
+      mechanical:
+        checks:
+          - file_exists: "$TOOL_FILE"
+          - file_contains: {path: "$TOOL_FILE", substring: "MARKER-OK"}
+"""
+
+MECH_BASH = """\
+lorm_policy: "1.4"
+metadata: {project: test, owner: owner@example.com}
+defaults: {max_level: L3, unknown_action: escalate}
+capabilities:
+  - id: fs.cleanup.build
+    level: L4
+    match:
+      tools: [Bash]
+      command_patterns: ["rm -rf build*"]
+    bounds: {targets: ["build/*"]}
+    verification:
+      expect: "clean exit"
+      mechanical:
+        checks:
+          - exit_code: 0
+          - output_contains: "removed"
+"""
+
+MECH_MALFORMED = """\
+lorm_policy: "1.4"
+metadata: {project: test, owner: owner@example.com}
+defaults: {max_level: L3, unknown_action: escalate}
+capabilities:
+  - id: fs.cleanup.build
+    level: L4
+    match:
+      tools: [Bash]
+      command_patterns: ["rm -rf build*"]
+    bounds: {targets: ["build/*"]}
+    verification:
+      expect: "whatever"
+      mechanical:
+        checks:
+          - no_such_check: 42
+"""
+
+
+def test_mechanical_verification():
+    print("mechanical verification (schema 1.4)")
+
+    # Write path: file_exists + file_contains via $TOOL_FILE
+    p = make_project(MECH_WRITE)
+    os.makedirs(os.path.join(p, "notes"), exist_ok=True)
+    target = os.path.join(p, "notes", "a.md")
+    open(target, "w").write("hello MARKER-OK world")
+    payload = write_payload("notes/a.md", p)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_output"] = "File created successfully"
+    rc, msg, err = run_gate_post(payload, p)
+    audit = os.path.join(p, ".lorm", "audit.jsonl")
+    rec = json.loads(open(audit).read().splitlines()[-1])
+    check("write checks pass -> verified",
+          rec["verified"] == "verified", str(rec) + err)
+    check("verified record carries x-verified-by",
+          rec.get("x-verified-by") == "lorm-hook-mechanical", str(rec))
+    check("passing verification -> no systemMessage", msg is None, str(msg))
+
+    # file_contains miss -> failed + detail names the check
+    open(target, "w").write("marker is gone")
+    rc, msg, err = run_gate_post(payload, p)
+    rec = json.loads(open(audit).read().splitlines()[-1])
+    check("file_contains miss -> failed",
+          rec["verified"] == "failed", str(rec) + err)
+    check("failure detail names the check",
+          "file_contains" in rec.get("x-verify-detail", ""), str(rec))
+    check("mechanical failure -> systemMessage names capability",
+          msg is not None and "fs.write.notes" in msg, str(msg))
+    shutil.rmtree(p)
+
+    # Bash: exit_code + output_contains from a dict-shaped tool_response
+    p2 = make_project(MECH_BASH)
+    payload = bash_payload("rm -rf build", p2)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_response"] = {"stdout": "removed build/", "exit_code": 0}
+    rc, msg, err = run_gate_post(payload, p2)
+    audit2 = os.path.join(p2, ".lorm", "audit.jsonl")
+    rec = json.loads(open(audit2).read().splitlines()[-1])
+    check("bash dict response, exit 0 + output hit -> verified",
+          rec["verified"] == "verified", str(rec) + err)
+
+    # plain-string output: exit code unrecoverable -> pending (degradation)
+    payload = bash_payload("rm -rf build", p2)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_output"] = "removed build/"
+    rc, msg, err = run_gate_post(payload, p2)
+    rec = json.loads(open(audit2).read().splitlines()[-1])
+    check("string output, no exit code -> stays pending",
+          rec["verified"] == "pending" and "x-verified-by" not in rec,
+          str(rec) + err)
+
+    # output_contains miss -> failed
+    payload = bash_payload("rm -rf build", p2)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_response"] = {"stdout": "nothing to do", "exit_code": 0}
+    rc, msg, err = run_gate_post(payload, p2)
+    rec = json.loads(open(audit2).read().splitlines()[-1])
+    check("output_contains miss -> failed",
+          rec["verified"] == "failed"
+          and "output_contains" in rec.get("x-verify-detail", ""),
+          str(rec) + err)
+
+    # interrupted response counts as nonzero exit -> failed
+    payload = bash_payload("rm -rf build", p2)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_response"] = {"stdout": "removed build/", "interrupted": True}
+    rc, msg, err = run_gate_post(payload, p2)
+    rec = json.loads(open(audit2).read().splitlines()[-1])
+    check("interrupted -> exit_code check failed",
+          rec["verified"] == "failed"
+          and "exit_code" in rec.get("x-verify-detail", ""),
+          str(rec) + err)
+    shutil.rmtree(p2)
+
+    # malformed mechanical block -> pending, exit 0, never crashes
+    p3 = make_project(MECH_MALFORMED)
+    payload = bash_payload("rm -rf build", p3)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_response"] = {"stdout": "removed", "exit_code": 0}
+    rc, msg, err = run_gate_post(payload, p3)
+    rec = json.loads(open(os.path.join(p3, ".lorm", "audit.jsonl"))
+                     .read().splitlines()[-1])
+    check("malformed mechanical block -> pending, exit 0",
+          rc == 0 and rec["verified"] == "pending", f"rc={rc} {rec} {err}")
+    shutil.rmtree(p3)
+
+    # pending backlog threshold: 9 seeded + 1 new = 10 -> message; 11 -> none
+    p4 = make_project(BASE_L5)
+    ts = (datetime.datetime.now(datetime.timezone.utc)
+          - datetime.timedelta(seconds=120))
+    os.makedirs(os.path.join(p4, ".lorm"), exist_ok=True)
+    with open(os.path.join(p4, ".lorm", "audit.jsonl"), "a") as fh:
+        for _ in range(9):
+            fh.write(json.dumps({
+                "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "capability": "fs.cleanup.build", "level": "L5",
+                "authorizer": "policy:x@1", "action": "rm -rf build",
+                "params": {}, "diagnosis_ref": "t", "outcome": "ok",
+                "verified": "pending"}) + "\n")
+    payload = bash_payload("rm -rf build", p4)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_output"] = "removed"
+    rc, msg, err = run_gate_post(payload, p4)
+    check("pending backlog hits 10 -> systemMessage",
+          msg is not None and "10" in msg and "fs.cleanup.build" in msg,
+          f"{msg} {err}")
+    rc, msg, err = run_gate_post(payload, p4)
+    check("11th pending -> no message (exact thresholds only)",
+          msg is None, str(msg))
+    shutil.rmtree(p4)
+
+
 def main():
     for fn in (test_passive, test_l5_allow_and_degrades, test_rate_limit,
                test_l4_l3_and_defaults, test_compound_and_wrappers,
                test_write_paths, test_self_protection, test_fail_closed,
                test_post_audit, test_mcp, test_executable_conditions,
-               test_review, test_multi_cap):
+               test_review, test_multi_cap, test_mechanical_verification):
         fn()
     print(f"\n{PASS} passed, {len(FAIL)} failed")
     if FAIL:

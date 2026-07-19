@@ -776,6 +776,171 @@ def summarize_action(tool, tool_input):
     return f"{tool} {tool_input.get('file_path', '')}"[:300]
 
 
+# ------------------------------------------------- mechanical verification
+
+
+PENDING_THRESHOLDS = (10, 25, 50, 100)
+
+
+def extract_output(payload):
+    """Return (output_text, exit_code_or_None) from the post payload.
+
+    Claude Code's field names vary by version: the result arrives as
+    `tool_output` or `tool_response`, either a plain string or a dict.
+    An exit code is recoverable only from dict shapes that carry one;
+    absent means None — mechanical exit_code checks then stay 'pending'."""
+    raw = payload.get("tool_output")
+    if raw is None:
+        raw = payload.get("tool_response")
+    if isinstance(raw, dict):
+        exit_code = None
+        for key in ("exit_code", "exitCode", "returncode", "returnCode", "code"):
+            value = raw.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                exit_code = value
+                break
+        if exit_code is None and (raw.get("interrupted") is True
+                                  or raw.get("is_error") is True
+                                  or raw.get("isError") is True):
+            exit_code = -1  # known-failed; exact code unknown
+        text = raw.get("stdout") or raw.get("output") or ""
+        if not isinstance(text, str):
+            text = json.dumps(text, ensure_ascii=False)
+        stderr = raw.get("stderr")
+        if isinstance(stderr, str) and stderr:
+            text = f"{text}\n{stderr}" if text else stderr
+        if not text:
+            text = json.dumps(raw, ensure_ascii=False)
+        return text, exit_code
+    if isinstance(raw, str):
+        return raw, None
+    if raw is None:
+        return "", None
+    return json.dumps(raw, ensure_ascii=False), None
+
+
+def _mech_target_path(value, tool_input, cwd, project_root):
+    """Resolve a mechanical-check path; None when not resolvable.
+
+    The literal token $TOOL_FILE means the Write/Edit file_path (resolved
+    like the tool resolves it, against cwd); literal paths resolve against
+    the project root."""
+    if value == "$TOOL_FILE":
+        raw = tool_input.get("file_path")
+        if not raw:
+            return None
+        _, real = norm_path(raw, cwd, project_root)
+        return real
+    absolute = value if os.path.isabs(value) else os.path.join(project_root, value)
+    return os.path.realpath(absolute)
+
+
+def evaluate_mechanical(cap, tool, tool_input, output, exit_code, cwd, project_root):
+    """Evaluate a capability's verification.mechanical checks (schema 1.4).
+
+    Returns (status, detail). All checks pass -> ("verified", detail); any
+    check fails -> ("failed", which); a check that cannot be evaluated is
+    unknown — no failures but any unknown leaves ("pending", None), keeping
+    the agent-driven verification path open. Fixed vocabulary, implicit
+    AND, no subprocesses. Never raises (post must not block)."""
+    try:
+        checks = ((cap.get("verification") or {}).get("mechanical") or {}).get("checks")
+        if not isinstance(checks, list) or not checks:
+            return "pending", None
+        passed = unknown = 0
+        for check in checks:
+            if not isinstance(check, dict) or len(check) != 1:
+                unknown += 1
+                continue
+            kind, value = next(iter(check.items()))
+            if kind == "file_exists" and isinstance(value, str) and value:
+                target = _mech_target_path(value, tool_input, cwd, project_root)
+                if target is None:
+                    unknown += 1
+                elif os.path.exists(target):
+                    passed += 1
+                else:
+                    return "failed", f"file_exists failed: {value}"
+            elif kind == "file_contains" and isinstance(value, dict):
+                path, substring = value.get("path"), value.get("substring")
+                if not (isinstance(path, str) and path
+                        and isinstance(substring, str) and substring):
+                    unknown += 1
+                    continue
+                target = _mech_target_path(path, tool_input, cwd, project_root)
+                if target is None:
+                    unknown += 1
+                    continue
+                if not os.path.exists(target):
+                    return "failed", f"file_contains failed: {path} does not exist"
+                try:
+                    with open(target, encoding="utf-8", errors="replace") as fh:
+                        content = fh.read(1 << 20)
+                except OSError:
+                    unknown += 1
+                    continue
+                if substring in content:
+                    passed += 1
+                else:
+                    return "failed", f"file_contains failed: {substring!r} not in {path}"
+            elif kind == "output_contains" and isinstance(value, str) and value:
+                if not output:
+                    unknown += 1
+                elif value in output:
+                    passed += 1
+                else:
+                    return "failed", f"output_contains failed: {value!r} not in output"
+            elif (kind == "exit_code" and isinstance(value, int)
+                  and not isinstance(value, bool)):
+                if exit_code is None:
+                    unknown += 1
+                elif exit_code == value:
+                    passed += 1
+                else:
+                    return "failed", f"exit_code failed: expected {value}, got {exit_code}"
+            else:
+                unknown += 1
+        if unknown:
+            return "pending", None
+        return "verified", f"{passed} mechanical check(s) passed"
+    except Exception:
+        return "pending", None
+
+
+def count_verification_backlog(audit_path, capability):
+    """Return (pending, verified) execution counts for one capability.
+
+    A later skill-written verification record (carrying x-verifies)
+    supersedes the execution record's own verified field, mirroring the
+    join lorm_review.py performs."""
+    try:
+        lines = open(audit_path, encoding="utf-8").read().splitlines()
+    except OSError:
+        return 0, 0
+    vmap, execs = {}, []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(rec, dict) or rec.get("capability") != capability:
+            continue
+        if "x-verifies" in rec:
+            vmap[rec["x-verifies"]] = rec.get("verified", "pending")
+        elif rec.get("action"):
+            execs.append(rec)
+    pending = verified = 0
+    for rec in execs:
+        status = vmap.get(rec.get("timestamp")) or rec.get("verified") or "pending"
+        if status == "pending":
+            pending += 1
+        elif status == "verified":
+            verified += 1
+    return pending, verified
+
+
 def run_post(payload):
     tool = payload.get("tool_name")
     if not is_gated_tool(tool):
@@ -845,16 +1010,13 @@ def run_post(payload):
             authorizer = f"human:session {payload.get('session_id', '?')}"
 
     if capability is None:
-        return  # benign call: no audit record
+        return None  # benign call: no audit record
 
-    output = payload.get("tool_output")
-    if output is None:
-        output = payload.get("tool_response")  # field name varies by CC version
-    if isinstance(output, dict):
-        output = (output.get("stdout") or output.get("output")
-                  or json.dumps(output, ensure_ascii=False))
-    if not isinstance(output, str):
-        output = json.dumps(output, ensure_ascii=False) if output is not None else ""
+    output, exit_code = extract_output(payload)
+    verified, verify_detail = "pending", None
+    if matched:  # mechanical checks live only on policy entries, never classifier hits
+        verified, verify_detail = evaluate_mechanical(
+            cap, tool, tool_input, output, exit_code, cwd, project_root)
     record = {
         "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "capability": capability,
@@ -864,11 +1026,28 @@ def run_post(payload):
         "params": {"tool": tool, "cwd": cwd},
         "diagnosis_ref": "unavailable-to-hook",
         "outcome": output[:300],
-        "verified": "pending",
+        "verified": verified,
         "x-writer": "lorm-hook",
         "x-session": payload.get("session_id", ""),
     }
+    if verify_detail:
+        record["x-verified-by"] = "lorm-hook-mechanical"
+        record["x-verify-detail"] = verify_detail[:200]
     append_audit(audit_path, record)
+
+    if verified == "failed":
+        return (f"LORM: mechanical verification FAILED for `{capability}`: "
+                f"{verify_detail} — a failed verification is a demotion "
+                f"trigger (SPEC 6-5); run /lorm:lorm-review")
+    if verified == "pending":
+        pending, ok = count_verification_backlog(audit_path, capability)
+        if pending in PENDING_THRESHOLDS and ok == 0:
+            return (f"LORM: `{capability}` has {pending} execution(s) pending "
+                    f"verification and 0 verified — trust-lifecycle progress "
+                    f"is stalled; add verification.mechanical (schema 1.4) "
+                    f"where the outcome is mechanically checkable, or run "
+                    f"the skill's verify step (/lorm:lorm-review explains)")
+    return None
 
 
 # --------------------------------------------------------------------- main
@@ -901,7 +1080,9 @@ def main():
         sys.exit(0)
     if mode == "post":
         try:
-            run_post(read_stdin_json())
+            message = run_post(read_stdin_json())
+            if message:
+                print(json.dumps({"systemMessage": message}))
         except Exception as exc:  # never block a completed call
             print(f"lorm_gate post: {type(exc).__name__}: {exc}", file=sys.stderr)
         sys.exit(0)

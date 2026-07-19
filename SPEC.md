@@ -1,6 +1,6 @@
 # LORM — Layered Operational Responsibility Model
 
-**Specification, version 2.0.0**
+**Specification, version 2.0.1**
 
 LORM defines six progressive levels of operational responsibility (L0–L5) for
 systems — AI-driven or conventional — that participate in operational
@@ -426,6 +426,14 @@ declarations make the pair a designed object rather than an accident.
   eligibility (I-7).
 - 10-4. Verification results accumulate into the capability's trust record —
   the evidence base for promotion (§6.2) and policy renewal (§8.2).
+
+*[Informative]* Nothing in 10-2 requires the verifier to be an agent or a
+human: an enforcing consumer MAY perform the comparison mechanically when
+the declared expected outcome is deterministically checkable from
+post-execution state (file existence, output content, exit status).
+Outcomes requiring judgment remain agent- or human-verified, and a check
+that cannot be evaluated never fabricates a result — it leaves the record
+unverified.
 
 ### 10.2 Audit — scope
 

@@ -91,6 +91,13 @@ exists:
 Rate limits count only *execution* records (those having `capability` and
 `action` and lacking `x-verifies`).
 
+If an execution record carries `x-verified-by: "lorm-hook-mechanical"`
+(schema 1.4 `verification.mechanical` checks evaluated by the hook), no
+verification record is needed for it — the hook already wrote
+`verified`/`failed`. Append a superseding verification record only when
+you have evidence the mechanical result is wrong; your record wins the
+review join (`x-verifies` supersedes the execution record's own field).
+
 Note: a capability's optional `match` block (schema 1.1: command/path
 patterns; 1.2: MCP `tool_patterns`/`input_patterns`) is consumed by the
 enforcement hook, not by you — your classification stays semantic (step 1

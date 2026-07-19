@@ -103,6 +103,32 @@ def semantic_checks(doc: dict) -> tuple[list[str], list[str]]:
                 f"says this SHOULD be reconsidered"
             )
 
+        verification = cap.get("verification")
+        mech_checks = []
+        if isinstance(verification, dict):
+            mech = verification.get("mechanical")
+            if isinstance(mech, dict):
+                mech_checks = mech.get("checks") or []
+        if mech_checks:
+            window = verification.get("window")
+            if window and not str(window).startswith("0"):
+                warnings.append(
+                    f"capability {cid}: verification.mechanical combined with "
+                    f"window '{window}' — mechanical checks run immediately; "
+                    f"a windowed outcome cannot be mechanically confirmed by "
+                    f"the hook (keep it on the agent-verified path)"
+                )
+            match_tools = (cap.get("match") or {}).get("tools") or []
+            has_exit_code = any(
+                isinstance(c, dict) and "exit_code" in c for c in mech_checks
+            )
+            if has_exit_code and "Bash" not in match_tools:
+                warnings.append(
+                    f"capability {cid}: exit_code check on a non-Bash-matched "
+                    f"capability — the exit code is only recoverable for Bash; "
+                    f"this check will leave records pending"
+                )
+
         match = cap.get("match")
         if isinstance(match, dict):
             tools = match.get("tools") or []
