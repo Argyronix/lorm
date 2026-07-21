@@ -3,6 +3,38 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.7.0 — 2026-07-21
+
+Outside-project writes can now be claimed by policy. Closes the asymmetry
+where the built-in `fs.write.outside_project` classifier could express a
+match semantic (a path outside the project root) that the policy language
+could not, leaving that one class permanently outside the trust lifecycle.
+
+### Added
+- Schema 1.5: optional boolean `match.path_outside_project` (with
+  `tools: [Write, Edit]`), a fourth `match` variant alongside
+  `command_patterns` / `path_patterns` / `tool_patterns`. Mirrors the
+  built-in classifier semantic that no `path_patterns` entry can cover
+  (an outside path has no project-relative form).
+- Enforcement engine: `cap_matches_path` treats "path outside project AND
+  flag set" as a match for Write/Edit, so a policy entry now (1) routes
+  pre-authorization through the entry instead of the classifier, (2) gets
+  post-side attribution to the entry — enabling schema-1.4
+  `verification.mechanical` for this class — and (3) becomes eligible for
+  L5 delegation. A flag-only match has minimal specificity, so patterned
+  entries still win the most-specific tie-break.
+- L5 scoping for outside writes reuses existing `bounds.targets` with
+  absolute globs (`glob_path` already matches absolute patterns); no
+  bounds changes. Project-relative targets never match an outside path and
+  safely degrade to L4.
+- 9 new tests (113 total).
+
+### Notes
+- Fully additive: policies without the flag and all prior schema versions
+  behave exactly as before. `SPEC.md` unchanged (§13 delegates match
+  semantics to the consumer). The `fs.write.outside_project` classifier is
+  unchanged and remains the fallback when no policy entry claims the class.
+
 ## 2.6.0 — 2026-07-19
 
 Discovery — actions LORM never saw now leave a trace and become draft

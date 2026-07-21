@@ -363,8 +363,13 @@ def cap_matches_path(cap, tool, rel_path):
     tools = match.get("tools")
     if tools and tool not in tools:
         return False
+    if rel_path is None:
+        # Outside the project root there is no project-relative form for a
+        # path_patterns entry to cover (schema 1.5); the boolean flag is the
+        # only policy-side equivalent of the fs.write.outside_project classifier.
+        return tool in ("Write", "Edit") and bool(match.get("path_outside_project"))
     patterns = match.get("path_patterns") or []
-    return bool(patterns) and rel_path is not None and any(
+    return bool(patterns) and any(
         fnmatch.fnmatchcase(rel_path, pat) for pat in patterns
     )
 
@@ -425,8 +430,13 @@ def cap_specificity(cap, tool, text=None, rel_path=None, tool_input=None):
         return _best_matching_specificity(
             match.get("command_patterns"), [text or ""])
     if tool in ("Write", "Edit"):
-        return _best_matching_specificity(
+        score = _best_matching_specificity(
             match.get("path_patterns"), [rel_path or ""])
+        # An outside-project flag match (schema 1.5) has no pattern to score;
+        # give it minimal specificity so any patterned entry still wins ties.
+        if score < 0 and rel_path is None and match.get("path_outside_project"):
+            return 0
+        return score
     score = _best_matching_specificity(match.get("tool_patterns"), [tool])
     for pattern in (match.get("input_patterns") or {}).values():
         score += pattern_specificity(pattern)

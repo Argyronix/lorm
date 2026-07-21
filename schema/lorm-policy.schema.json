@@ -223,12 +223,17 @@
           "type": "object",
           "minProperties": 1,
           "additionalProperties": { "type": "string" }
+        },
+        "path_outside_project": {
+          "description": "Schema 1.5+: boolean covering Write/Edit whose file_path resolves outside the project root. Mirrors the built-in fs.write.outside_project classifier semantic, which no path_patterns entry can express (an outside path has no project-relative form). Meaningful only with tools:[Write,Edit]; a flag-only match carries minimal specificity, so any patterned entry still wins the most-specific tie-break. L5 entries for this class MUST scope with absolute glob bounds.targets (project-relative targets can never match an outside path and degrade to L4).",
+          "type": "boolean"
         }
       },
       "anyOf": [
         { "required": ["command_patterns"] },
         { "required": ["path_patterns"] },
-        { "required": ["tool_patterns"] }
+        { "required": ["tool_patterns"] },
+        { "required": ["path_outside_project"] }
       ],
       "additionalProperties": false,
       "patternProperties": { "^x-": {} }

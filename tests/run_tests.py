@@ -1080,13 +1080,106 @@ def test_discover():
     shutil.rmtree(p)
 
 
+def test_outside_project_match():
+    print("outside-project match (schema 1.5)")
+    # An outside directory we grant an L5 capability to write into, plus a
+    # sibling outside path the grant does NOT cover.
+    outside_dir = tempfile.mkdtemp(prefix="lorm-outside-")
+    target_in = os.path.join(outside_dir, "note.md")
+    target_out = os.path.join(tempfile.gettempdir(), "lorm-ungranted.md")
+
+    outside_l5 = f"""\
+lorm_policy: "1.5"
+metadata: {{project: test, owner: owner@example.com}}
+defaults: {{max_level: L3, unknown_action: escalate}}
+capabilities:
+  - id: fs.write.secondbrain
+    level: L5
+    match:
+      tools: [Write, Edit]
+      path_outside_project: true
+    policy:
+      version: 1
+      author: author@example.com
+      approved_by: approver@example.com
+      approved_at: 2026-07-01
+      expires: {FUTURE}
+      tested: "test corpus"
+    bounds:
+      targets: ["{outside_dir}/*"]
+    rollback: "revert"
+    verification:
+      expect: "written"
+      mechanical:
+        checks:
+          - file_exists: "$TOOL_FILE"
+audit:
+  log: ".lorm/audit.jsonl"
+  record_fields: [timestamp, capability, level, authorizer, action, params, diagnosis_ref, outcome, verified]
+"""
+    # L5 flag entry, absolute targets: within scope -> allow, beyond -> degrade
+    p = make_project(outside_l5)
+    rc, d, r, _ = run_gate("pre", write_payload(target_in, p), p)
+    check("outside write within absolute targets -> allow",
+          d == "allow" and "fs.write.secondbrain" in r, f"{d} {r}")
+    rc, d, r, _ = run_gate("pre", write_payload(target_out, p), p)
+    check("outside write beyond targets -> ask (degrade to L4)",
+          d == "ask" and "outside" in r and "fs.write.secondbrain" in r, f"{d} {r}")
+    rc, d, r, _ = run_gate("pre",
+                           write_payload(target_in, p, tool="Edit"), p)
+    check("Edit also covered by the flag -> allow", d == "allow", f"{d} {r}")
+
+    # L4 / L3 flag entries gate as usual
+    p2 = make_project(outside_l5.replace("level: L5", "level: L4"))
+    rc, d, r, _ = run_gate("pre", write_payload(target_in, p2), p2)
+    check("outside write, L4 flag entry -> ask",
+          d == "ask" and "fs.write.secondbrain" in r, f"{d} {r}")
+    p3 = make_project(outside_l5.replace("level: L5", "level: L3"))
+    rc, d, r, _ = run_gate("pre", write_payload(target_in, p3), p3)
+    check("outside write, L3 flag entry -> deny",
+          d == "deny" and "fs.write.secondbrain" in r, f"{d} {r}")
+
+    # Regression: no flag entry -> the built-in classifier still fires
+    p4 = make_project(ESCALATE_DEFAULTS)
+    rc, d, r, _ = run_gate("pre", write_payload(target_in, p4), p4)
+    check("no flag entry -> classifier fallback ask",
+          d == "ask" and "outside_project" in r, f"{d} {r}")
+    # Regression: an in-project write is unaffected by the flag entry
+    rc, d, r, _ = run_gate("pre",
+                           write_payload(os.path.join(p, "notes.md"), p), p)
+    check("in-project write with flag-only entry -> silent (no path match)",
+          d is None, f"{d} {r}")
+
+    # Post: attribution flips to the policy entry and mechanical verification
+    # now runs for this class (previously impossible via the classifier).
+    p5 = make_project(outside_l5)
+    open(target_in, "w").write("hi")
+    payload = write_payload(target_in, p5)
+    payload["hook_event_name"] = "PostToolUse"
+    payload["tool_output"] = "File created successfully"
+    rc, msg, err = run_gate_post(payload, p5)
+    audit = os.path.join(p5, ".lorm", "audit.jsonl")
+    rec = json.loads(open(audit).read().splitlines()[-1])
+    check("post: attributed to policy entry, not classifier",
+          rec["capability"] == "fs.write.secondbrain"
+          and rec["authorizer"].startswith("policy:fs.write.secondbrain@"),
+          str(rec) + err)
+    check("post: mechanical verification runs for outside-project write",
+          rec["verified"] == "verified", str(rec) + err)
+
+    for x in (p, p2, p3, p4, p5, outside_dir):
+        shutil.rmtree(x, ignore_errors=True)
+    if os.path.exists(target_out):
+        os.remove(target_out)
+
+
 def main():
     for fn in (test_passive, test_l5_allow_and_degrades, test_rate_limit,
                test_l4_l3_and_defaults, test_compound_and_wrappers,
                test_write_paths, test_self_protection, test_fail_closed,
                test_post_audit, test_mcp, test_executable_conditions,
                test_review, test_multi_cap, test_mechanical_verification,
-               test_observations, test_discover):
+               test_observations, test_discover, test_outside_project_match):
         fn()
     print(f"\n{PASS} passed, {len(FAIL)} failed")
     if FAIL:

@@ -1,9 +1,10 @@
-# Full LORM policy example: two L4 capabilities, three L5 capabilities
-# (one arriving via an MCP tool), hard-enforcement match blocks
-# (schema 1.1/1.2), an executable condition check (schema 1.3),
-# mechanical verification checks (schema 1.4), audit configuration,
-# and one active demotion.
-lorm_policy: "1.4"
+# Full LORM policy example: two L4 capabilities, four L5 capabilities
+# (one arriving via an MCP tool, one writing outside the project root),
+# hard-enforcement match blocks (schema 1.1/1.2), an executable condition
+# check (schema 1.3), mechanical verification checks (schema 1.4), an
+# outside-project match flag (schema 1.5), audit configuration, and one
+# active demotion.
+lorm_policy: "1.5"
 
 metadata:
   project: "acme-payments"
@@ -52,6 +53,33 @@ capabilities:
         checks:                   # all pass => verified, any fail => failed,
           - file_exists: "$TOOL_FILE"     # unevaluable => stays pending
           - file_contains: {path: "$TOOL_FILE", substring: "-- migration end"}
+
+  # --- L5 writing OUTSIDE the project root (schema 1.5): a path outside
+  # --- the project has no project-relative form, so path_patterns cannot
+  # --- cover it. The boolean flag claims the class; scope MUST be an
+  # --- absolute glob in bounds.targets (project-relative targets can never
+  # --- match an outside path and degrade the action to L4) ---
+  - id: fs.write.shared_notes
+    description: "Maintain the shared engineering notes vault outside the repo"
+    level: L5
+    match:
+      tools: [Write, Edit]
+      path_outside_project: true
+    policy:
+      version: 1
+      author: "alice@acme.example"
+      approved_by: "bob@acme.example"
+      approved_at: 2026-07-01
+      expires: 2026-10-01
+      tested: "canary run 2026-06-30, 20 writes, 0 rollbacks"
+    bounds:
+      targets: ["/srv/acme/notes/**"]   # absolute glob, hook-verified
+    rollback: "git -C /srv/acme/notes checkout -- ."
+    verification:
+      expect: "note file exists after the write"
+      mechanical:
+        checks:
+          - file_exists: "$TOOL_FILE"
 
   # --- L5: policy authorizes; full delegation metadata is REQUIRED ---
   - id: cache.flush

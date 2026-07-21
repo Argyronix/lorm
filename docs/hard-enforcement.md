@@ -105,11 +105,23 @@ Combining rule when several segments/capabilities produce decisions:
   `"redis-cli *"`) — Bash `bounds.targets` are not hook-verifiable.
 - **Paths**: Write/Edit `file_path` is resolved to a real path (symlinks
   and `..` collapsed) relative to the project root; paths resolving
-  outside the project hit the `fs.write.outside_project` built-in. Glob
+  outside the project hit the `fs.write.outside_project` built-in unless a
+  policy claims them (below). Glob
   semantics are `fnmatch`: **`*` matches across `/`** (`build/*` covers
   the whole subtree); a pattern starting with `/` matches the absolute
   path; a path that is an ancestor of a target scope is within scope
   (deleting `build` is within `build/*`).
+- **Outside-project writes** (schema 1.5): a path outside the project root
+  has no project-relative form, so no `path_patterns` entry can cover it.
+  The optional boolean `match.path_outside_project: true` (with
+  `tools: [Write, Edit]`) is the policy-side equivalent of the
+  `fs.write.outside_project` classifier — it lets a capability claim this
+  class, restoring the override rule (below), post-side attribution, and
+  mechanical verification for it. A flag-only match carries minimal
+  specificity, so any patterned entry still wins the tie-break. **Scope L5
+  entries with absolute glob `bounds.targets`** (`"/home/me/vault/**"`):
+  project-relative targets can never match an outside path and degrade the
+  action to L4.
 - **Rate limits**: sliding 3600-second window over execution records in
   the audit log. Missing log = zero prior actions; unparseable log =
   `ask`. Rotate the log by moving it aside (rotated files are not
