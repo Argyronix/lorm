@@ -62,12 +62,15 @@ scratch project with a policy file (see docs/hard-enforcement.md §Testing).
 
 ## Conventions
 
-- Policy schema versions are **additive** (`lorm_policy` "1.0"…"1.3");
+- Policy schema versions are **additive** (`lorm_policy` "1.0"…"1.5");
   old policies must stay valid. `minimal.lorm-policy.yaml` intentionally
   stays at "1.0" to prove backward compatibility.
 - Version discipline: bump `.claude-plugin/plugin.json` and add a
   CHANGELOG entry together; spec (SPEC.md) is versioned separately
-  (semver, currently 2.0.0) from the plugin.
+  (semver, currently 2.0.2) from the plugin. Three version lines exist and
+  drift apart easily — plugin (`plugin.json`, currently 2.7.0), spec
+  (`SPEC.md`), policy schema (`lorm_policy`) — so when one changes, check
+  what README.md's "Status and roadmap" claims about all three.
 - Engine code: stdlib-only; PyYAML imported lazily and only for YAML
   policies (JSON policies must work without it). `classifiers.json` is
   JSON for exactly that reason.
