@@ -27,6 +27,7 @@ defer to this repo's SPEC.md as canonical.
 python3 tests/run_tests.py            # full suite (subprocess-driven, no pytest)
 python3 skills/lorm/scripts/validate_policy.py schema/examples/full.lorm-policy.yaml
 python3 skills/lorm/scripts/validate_policy.py schema/examples/minimal.lorm-policy.yaml
+python3 tests/check_versions.py       # version claims in prose vs. their sources
 ```
 
 All tests green is the bar for every engine/schema change. Tests create

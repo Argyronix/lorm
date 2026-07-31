@@ -1,0 +1,21 @@
+version: 2
+
+# Actions in .github/workflows are pinned by commit SHA, which buys
+# reproducibility and gives up automatic security updates: a pinned SHA never
+# moves, including away from a known-vulnerable release. Dependabot restores
+# the update path without giving up the pin — it opens a pull request that
+# rewrites the SHA and the trailing version comment, for a human to read and
+# merge. It proposes; it does not enact.
+#
+# The Python dependencies (PyYAML, jsonschema) are installed ad hoc in CI and
+# are not declared in a manifest here, so there is nothing for Dependabot to
+# track: the engine itself is stdlib-only by design.
+
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: ci
