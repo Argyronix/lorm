@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
-# Release bodies passed to `gh release create --notes-file`. Scratch by
-# design: the durable change description is CHANGELOG.md, and a tracked
-# second copy would drift from it.
+# Bodies passed to `gh release create --notes-file` / `gh issue create
+# --body-file`. Scratch by design: once filed, the durable copy lives on
+# GitHub (or, for releases, in CHANGELOG.md), and a tracked second copy here
+# would drift from it.
 release-notes-v*.md
+issue-*.md
