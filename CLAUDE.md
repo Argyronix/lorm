@@ -34,6 +34,16 @@ temp projects under `$TMPDIR`. Engine changes without a covering test are
 not done. For live verification: `claude --plugin-dir . -p "…"` in a
 scratch project with a policy file (see docs/hard-enforcement.md §Testing).
 
+Supported Python is **3.10 through 3.14** — `.github/workflows/tests.yml`
+runs the suite on every one of them, so raising the floor or using a newer
+language feature means editing that matrix deliberately. (The floor is 3.10
+because `validate_policy.py` annotates with `X | None`, evaluated at
+definition time; 3.9 reached end of life in October 2025.) Two CI jobs guard
+invariants the suite structurally cannot: the policy examples must validate,
+and a JSON policy must be enforced in an environment with no PyYAML at all.
+Third-party actions in that workflow are pinned by commit SHA, not tag —
+trusting a movable name is the shortcut this project argues against.
+
 ## Non-negotiable design invariants
 
 - **Propose, never enact (SPEC I-8).** No tool in this repo — skill,

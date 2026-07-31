@@ -1,5 +1,8 @@
 # LORM — Layered Operational Responsibility Model
 
+[![tests](https://github.com/Argyronix/lorm/actions/workflows/tests.yml/badge.svg)](https://github.com/Argyronix/lorm/actions/workflows/tests.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 LORM defines six levels of operational responsibility (L0–L5) for systems
 that participate in operational decisions — AI agents, automation platforms,
 control loops. Unlike capability-graded autonomy scales (SAE, most AI-agent
@@ -148,7 +151,15 @@ that accumulates executions with nothing verified is a stalled trust lifecycle, 
 
 - Specification 2.0.2, the agent skill, and the enforcement plugin 2.7.0
   (PreToolUse gate + PostToolUse audit, policy schema 1.5):
-  **this repository, working and tested** — 113 tests, all green.
+  **this repository, working and tested** — 113 tests, run in CI on Python
+  3.10 through 3.14. The engine needs the standard library and nothing else;
+  PyYAML is required only to read YAML policy files, and CI proves a JSON
+  policy is enforced without it. `validate_policy.py` additionally needs
+  `jsonschema`.
+- What CI cannot cover: whether Claude Code itself wires the hooks and loads
+  the plugin correctly. That is verified by hand
+  (`claude --plugin-dir . -p "…"`), and the 2.4.1 fix — a duplicate hooks
+  load on marketplace install — is the kind of defect only that catches.
 - The skill alone is *soft* enforcement (disciplined agent behavior); the
   plugin's hooks make the authorization boundary deterministic. Neither
   claims to defeat a deliberately adversarial model — see the threat model

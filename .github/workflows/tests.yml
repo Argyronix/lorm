@@ -1,0 +1,91 @@
+name: tests
+
+# Third-party actions are pinned by commit SHA, not by tag: a tag is a movable
+# reference, and "trust whatever this name points at today" is the exact
+# authorization shortcut this project exists to argue against.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: suite (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install PyYAML
+        # The engine is stdlib-only; PyYAML is needed solely to read YAML
+        # policy files, which most tests in the suite use.
+        run: pip install --disable-pip-version-check pyyaml
+      - name: Run the suite
+        run: python3 tests/run_tests.py
+
+  policy-examples:
+    name: policy examples validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - run: pip install --disable-pip-version-check jsonschema pyyaml
+      - run: python3 skills/lorm/scripts/validate_policy.py schema/examples/minimal.lorm-policy.yaml
+      - run: python3 skills/lorm/scripts/validate_policy.py schema/examples/full.lorm-policy.yaml
+
+  json-policy-without-pyyaml:
+    name: JSON policy works without PyYAML
+    runs-on: ubuntu-latest
+    # CLAUDE.md commits to JSON policies working when PyYAML is absent. The
+    # suite cannot check that invariant — it needs PyYAML for its own YAML
+    # fixtures — so it is checked here, in a deliberately bare environment.
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Assert PyYAML is absent
+        run: |
+          if python3 -c "import yaml" 2>/dev/null; then
+            echo "PyYAML is installed — this job would prove nothing"; exit 1
+          fi
+      - name: Gate a forbidden action through a JSON policy
+        run: |
+          mkdir -p "$RUNNER_TEMP/project"
+          cat > "$RUNNER_TEMP/project/lorm-policy.json" <<'POLICY'
+          {"lorm_policy": "1.1",
+           "metadata": {"project": "ci", "owner": "ci@example.com",
+                        "updated": "2026-07-30"},
+           "defaults": {"max_level": "L3", "unknown_action": "escalate",
+                        "uncertainty_threshold": 0.2},
+           "capabilities": [
+             {"id": "db.index.drop", "description": "Drop indexes",
+              "level": "L3",
+              "match": {"tools": ["Bash"],
+                        "command_patterns": ["psql *DROP INDEX*"]}}]}
+          POLICY
+          printf '%s' '{"session_id": "ci", "cwd": "'"$RUNNER_TEMP/project"'",
+            "hook_event_name": "PreToolUse", "tool_name": "Bash",
+            "tool_input": {"command": "psql -c \"DROP INDEX idx\""}}' \
+            | CLAUDE_PROJECT_DIR="$RUNNER_TEMP/project" \
+              CLAUDE_PLUGIN_ROOT="$GITHUB_WORKSPACE" \
+              python3 hooks/scripts/lorm_gate.py pre > decision.json
+          cat decision.json
+          python3 - <<'CHECK'
+          import json, sys
+          out = json.load(open("decision.json"))["hookSpecificOutput"]
+          if out["permissionDecision"] != "deny":
+              sys.exit(f"expected deny, got {out['permissionDecision']}")
+          print("ok: JSON policy enforced without PyYAML")
+          CHECK
