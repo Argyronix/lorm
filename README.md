@@ -2,6 +2,7 @@
 
 [![tests](https://github.com/Argyronix/lorm/actions/workflows/tests.yml/badge.svg)](https://github.com/Argyronix/lorm/actions/workflows/tests.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21723237.svg)](https://doi.org/10.5281/zenodo.21723237)
 
 LORM defines six levels of operational responsibility (L0–L5) for systems
 that participate in operational decisions — AI agents, automation platforms,
@@ -203,7 +204,10 @@ all in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 Cite the specification version you worked from — see
 [`CITATION.cff`](CITATION.cff), or use the "Cite this repository" button on
-GitHub.
+GitHub. Releases are archived on Zenodo:
+[10.5281/zenodo.21723237](https://doi.org/10.5281/zenodo.21723237) always
+resolves to the newest archived release, and each release also has its own DOI
+if you need to pin one.
 
 ## License
 

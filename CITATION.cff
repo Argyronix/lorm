@@ -24,6 +24,17 @@ authors:
 # at 2.7.0; the policy schema is at 1.5. See README.md "Status and roadmap".
 version: 2.0.2
 date-released: "2026-07-19"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21723237
+    description: >-
+      Concept DOI — always resolves to the most recent archived release. Use
+      this one unless you need to pin a specific version.
+  - type: doi
+    value: 10.5281/zenodo.21723238
+    description: >-
+      Archived snapshot of release v2.7.0 (plugin 2.7.0, specification 2.0.2,
+      policy schema 1.5).
 license: Apache-2.0
 repository-code: "https://github.com/Argyronix/lorm"
 url: "https://github.com/Argyronix/lorm"
