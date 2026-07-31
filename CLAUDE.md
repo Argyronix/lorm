@@ -111,11 +111,37 @@ runtime, which the runner then forces onto the new one, warning once per job.
 
 ## Releasing
 
+Users install via `/plugin marketplace add Argyronix/lorm` →
+`/plugin install lorm@argyronix-lorm`, which installs the current state of
+`main` — so **pushing to `main` is still what ships**. Tags and releases do
+not distribute anything; they exist so a version can be rolled back to,
+cited, and seen.
+
 ```bash
 python3 tests/run_tests.py                      # must be green
+python3 tests/check_versions.py                 # prose claims match the sources
 git add -A && git commit && git push origin main # gh CLI is the credential helper
 curl -sf https://raw.githubusercontent.com/Argyronix/lorm/main/.claude-plugin/plugin.json
+git tag v<version> <the version's commit>       # lightweight, `v` prefix
+git push origin v<version>
+gh release create v<version> --latest --notes-file <notes>   # newest only
 ```
 
-Users install via `/plugin marketplace add Argyronix/lorm` →
-`/plugin install lorm@argyronix-lorm`; pushing to `main` is releasing.
+Conventions to keep:
+
+- **`v` prefix, lightweight tags.** `plugin.json` and the CHANGELOG headings
+  carry the bare number; the tag carries `v`. Lightweight because an
+  annotated tag would stamp its own date, and the nine historical tags
+  (v2.0.0…v2.6.0) were created retroactively on 2026-07-30 — a tag date
+  would have been a false one. The commit date is the real date.
+- **One tag per version, on the commit that cut it** — not on whatever
+  `main` happens to be. Docs-only and CI-only commits do not get tags,
+  because they do not bump `plugin.json`.
+- **Release notes live in the release, not in a tracked file.** The full
+  change description is already in `CHANGELOG.md`; a second copy in the repo
+  would drift. The release body summarizes and links there.
+- **Only the newest version gets a GitHub Release object.** Older versions
+  stay as tags: GitHub lists them with their commit dates, whereas ten
+  release objects would all carry the date they were created.
+- Tags are unsigned for now. If commit signing is ever set up, sign tags in
+  the same change — a mix of signed and unsigned tags says less than either.
