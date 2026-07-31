@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: >-
+  If you reference LORM in a paper, standard, or internal policy document,
+  please cite the specification version you worked from — the model is
+  normative, so which version you read matters.
+title: "LORM — Layered Operational Responsibility Model"
+abstract: >-
+  A specification grading the operational autonomy of systems that participate
+  in operational decisions on a single axis: who authorized the action — nobody
+  needed (observing, explaining), a human per action, or an explicit, versioned,
+  expiring policy. Six levels (L0-L5) are assigned per capability rather than
+  per system, earned by measured outcomes and demoted automatically on
+  incidents, rollbacks, verification failures, telemetry loss, or policy expiry.
+  The repository also contains a reference implementation as a Claude Code
+  plugin: an agent skill, policy-driven enforcement hooks, and a machine-
+  readable policy schema.
+type: software
+authors:
+  - name: "Argyronix"
+    website: "https://argyronix.com"
+    email: "contact@argyronix.com"
+# `version` is the SPECIFICATION version (SPEC.md), which is what citing work
+# refers to. The plugin implementing it versions independently and is currently
+# at 2.7.0; the policy schema is at 1.5. See README.md "Status and roadmap".
+version: 2.0.2
+date-released: "2026-07-19"
+license: Apache-2.0
+repository-code: "https://github.com/Argyronix/lorm"
+url: "https://github.com/Argyronix/lorm"
+keywords:
+  - ai-agents
+  - ai-safety
+  - autonomy
+  - governance
+  - policy-enforcement
+  - levels-of-autonomy
+  - claude-code

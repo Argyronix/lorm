@@ -58,20 +58,27 @@ claude_spec = find(r"semver, currently ([\d.]+)\)", claude, "CLAUDE.md")
 claude_plugin = find(r"`plugin\.json`, currently ([\d.]+)\)", claude,
                      "CLAUDE.md")
 claude_schema = find(r'`lorm_policy` "1\.0"…"([\d.]+)"', claude, "CLAUDE.md")
+citation = read("CITATION.cff")
+cff_spec = find(r"^version: ([\d.]+)", citation, "CITATION.cff")
+cff_plugin = find(r"at ([\d.]+); the policy schema", citation, "CITATION.cff")
+cff_schema = find(r"the policy schema is at ([\d.]+)\.", citation, "CITATION.cff")
 
 CHECKS = [
     ("plugin", plugin, [
         ("CHANGELOG.md latest heading", changelog),
         ("README.md status", readme_plugin),
         ("CLAUDE.md conventions", claude_plugin),
+        ("CITATION.cff comment", cff_plugin),
     ]),
     ("specification", spec, [
         ("README.md status", readme_status),
         ("CLAUDE.md conventions", claude_spec),
+        ("CITATION.cff version", cff_spec),
     ]),
     ("policy schema", schema, [
         ("README.md status", readme_schema),
         ("CLAUDE.md conventions", claude_schema),
+        ("CITATION.cff comment", cff_schema),
     ]),
 ]
 

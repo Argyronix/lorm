@@ -191,6 +191,20 @@ for the three most recent features — written as issue drafts before
 implementation, retained afterwards — are in
 [`docs/`](docs/) (`draft-issue-*.md`).
 
+## Contributing
+
+Pull requests are welcome in `hooks/`, `tests/`, `docs/` and `examples/`.
+Changes to `SPEC.md` start as an issue, because a change to normative text is a
+change to what the model means. The design invariants a pull request must not
+break, the checks to run, and why there is no contributor licence agreement are
+all in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Citing
+
+Cite the specification version you worked from — see
+[`CITATION.cff`](CITATION.cff), or use the "Cite this repository" button on
+GitHub.
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
