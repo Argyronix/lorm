@@ -99,11 +99,26 @@ you have evidence the mechanical result is wrong; your record wins the
 review join (`x-verifies` supersedes the execution record's own field).
 
 Note: a capability's optional `match` block (schema 1.1: command/path
-patterns; 1.2: MCP `tool_patterns`/`input_patterns`) is consumed by the
-enforcement hook, not by you — your classification stays semantic (step 1
-of the skill). An L5 entry without `match` is soft-only: you may act under
-it, but the hook cannot pre-authorize it, so expect the normal permission
-dialog. MCP action classes follow `mcp.<server>.<tool>` naming.
+patterns; 1.2: MCP `tool_patterns`/`input_patterns`; 1.5:
+`path_outside_project`) is consumed by the enforcement hook, not by you —
+your classification stays semantic (step 1 of the skill). An L5 entry
+without `match` is soft-only: you may act under it, but the hook cannot
+pre-authorize it, so expect the normal permission dialog. MCP action
+classes follow `mcp.<server>.<tool>` naming.
+
+`match.path_outside_project: true` (schema 1.5, with `tools: [Write, Edit]`)
+claims writes to paths *outside* the project root. It exists because such a
+path has no project-relative form, so no `path_patterns` entry can express
+it. Reading a policy that uses it, treat the entry as owning that whole
+class — a write outside the project is no longer the built-in
+`fs.write.outside_project` fallback but this capability, at this capability's
+level, with this capability's bounds and verification.
+
+Scope for such an entry lives in `bounds.targets` as **absolute** globs
+(`/Users/me/notes/*`). A project-relative target can never match an outside
+path, so an entry scoped that way degrades every action to L4 — if you are
+asked why an apparently granted L5 write still prompts, check for that
+mismatch first.
 
 ## What you never do to this file
 

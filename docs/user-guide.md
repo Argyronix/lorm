@@ -199,6 +199,39 @@ audit log is denied outright. In our live tests the agent both refused
 the self-grant and had its later attempt to edit the audit log blocked
 by the hook with the exact reason.
 
+## Scenario 7 — files outside the project (2.7.0+)
+
+An agent working in one repository often needs to write somewhere else: a
+notes vault, a sibling checkout, a config file in your home directory. Those
+writes are the ones you are least likely to notice and most likely to regret,
+so the plugin treats every one of them as L4 by default — it asks, every time,
+no matter how routine the file becomes.
+
+If a particular destination really is routine, you can grant it like anything
+else. Add `path_outside_project: true` to the entry's `match` block and scope
+it with **absolute** paths in `bounds.targets`:
+
+```yaml
+  - id: fs.write.shared_notes
+    description: "Maintain the shared engineering notes vault outside the repo"
+    level: L5
+    match:
+      tools: [Write, Edit]
+      path_outside_project: true
+    bounds:
+      targets: ["/Users/me/notes/*"]      # absolute: a project-relative
+                                          # target can never match here
+```
+
+The reason this needed its own field: a path outside the project has no
+project-relative form, so no `path_patterns` entry could ever describe it.
+Until 2.7.0 that made outside writes the one class of action stuck permanently
+at "ask forever" — it could not be delegated, and it could not earn promotion
+either. Now it goes through the same lifecycle as everything else, including
+demotion when something goes wrong. If a write you thought you had granted
+still prompts you, check the targets: relative paths there silently degrade
+the action back to L4, which is the safe direction to fail.
+
 ## A starter policy, annotated
 
 Copy this as `lorm-policy.yaml` and grow it as trust accumulates:
@@ -230,9 +263,10 @@ audit:
 
 Two ready-made references for the next stage:
 [minimal](../schema/examples/minimal.lorm-policy.yaml) (exactly the file
-above) and [full](../schema/examples/full.lorm-policy.yaml) (L4 + L5 +
-MCP + executable condition + a demotion, all commented). Validate any
-edit before relying on it:
+above) and [full](../schema/examples/full.lorm-policy.yaml) (a denied L3
+entry, L4 with mechanical verification, L5 via MCP, an outside-project
+grant, an executable condition and an active demotion, all commented).
+Validate any edit before relying on it:
 
 ```bash
 python3 skills/lorm/scripts/validate_policy.py lorm-policy.yaml
