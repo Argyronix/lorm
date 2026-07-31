@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+# Release bodies passed to `gh release create --notes-file`. Scratch by
+# design: the durable change description is CHANGELOG.md, and a tracked
+# second copy would drift from it.
+release-notes-v*.md
