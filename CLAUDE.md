@@ -42,7 +42,10 @@ definition time; 3.9 reached end of life in October 2025.) Two CI jobs guard
 invariants the suite structurally cannot: the policy examples must validate,
 and a JSON policy must be enforced in an environment with no PyYAML at all.
 Third-party actions in that workflow are pinned by commit SHA, not tag —
-trusting a movable name is the shortcut this project argues against.
+trusting a movable name is the shortcut this project argues against. When
+re-pinning, resolve the tag (`git ls-remote`) *and* read `runs.using` in the
+action's `action.yml`: a current tag can still target a deprecated Node
+runtime, which the runner then forces onto the new one, warning once per job.
 
 ## Non-negotiable design invariants
 
