@@ -165,6 +165,10 @@ that accumulates executions with nothing verified is a stalled trust lifecycle, 
   plugin's hooks make the authorization boundary deterministic. Neither
   claims to defeat a deliberately adversarial model — see the threat model
   in [`docs/hard-enforcement.md`](docs/hard-enforcement.md).
+The entries below date each feature by the **plugin** release that shipped it.
+The specification and the policy schema version independently — a plugin
+release usually leaves both untouched.
+
 - MCP tools are gated since 2.2.0 (schema 1.2 `tool_patterns` /
   `input_patterns`).
 - Trust-lifecycle tooling since 2.3.0: `/lorm:lorm-review` analyzes the
