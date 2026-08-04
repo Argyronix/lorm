@@ -41,7 +41,7 @@ agent skill (soft layer) and enforcement hooks (hard layer).
 | [`schema/lorm-policy.schema.json`](schema/lorm-policy.schema.json) | JSON Schema for the policy file, with [examples](schema/examples/) |
 | [`skills/lorm/`](skills/lorm/) | The Agent Skill — LORM as agent discipline (soft enforcement) |
 | [`hooks/`](hooks/) + [`docs/hard-enforcement.md`](docs/hard-enforcement.md) | PreToolUse authorization gate + PostToolUse audit trail (hard enforcement) |
-| [`examples/`](examples/) | The model applied to [database operations](examples/database-operations.md), [coding agents](examples/coding-agent.md), [security ops](examples/cybersecurity.md) |
+| [`examples/`](examples/) | The model applied to [database operations](examples/database-operations.md), [coding agents](examples/coding-agent.md), [security ops](examples/cybersecurity.md), [procurement](examples/procurement.md), [clinical operations](examples/medicine.md) |
 
 ## Quick start
 
