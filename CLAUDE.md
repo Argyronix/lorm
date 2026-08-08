@@ -112,10 +112,16 @@ runtime, which the runner then forces onto the new one, warning once per job.
 ## Releasing
 
 Users install via `/plugin marketplace add Argyronix/lorm` →
-`/plugin install lorm@argyronix-lorm`, which installs the current state of
-`main` — so **pushing to `main` is still what ships**. Tags and releases do
-not distribute anything; they exist so a version can be rolled back to,
-cited, and seen.
+`/plugin install lorm@argyronix-lorm`. A **new** install takes the current
+state of `main`, so pushing to `main` is what reaches new users. An
+**existing** install does not: `plugin.json` sets an explicit `version`,
+which pins it, and `/plugin update` reports "already at the latest version"
+until that field changes. So a docs-only push reaches new installs and nobody
+else — which is the intended behavior, and the reason the version bump is the
+real release event even though nothing is distributed by the tag.
+
+Tags and releases do not distribute anything either; they exist so a version
+can be rolled back to, cited, and seen.
 
 ```bash
 python3 tests/run_tests.py                      # must be green

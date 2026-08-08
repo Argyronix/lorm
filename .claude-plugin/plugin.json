@@ -1,10 +1,24 @@
 {
   "name": "lorm",
+  "displayName": "LORM — Layered Operational Responsibility Model",
   "version": "2.7.0",
-  "description": "LORM hard enforcement: PreToolUse authorization gate and PostToolUse audit trail driven by lorm-policy.yaml, plus the LORM agent skill (soft layer).",
+  "description": "Authorization gate and audit trail for agent actions: what a written policy grants runs, what it does not requires approval, what it forbids is denied.",
   "author": {
     "name": "Argyronix",
-    "email": "edwardfish@argyronix.com"
+    "email": "edwardfish@argyronix.com",
+    "url": "https://github.com/Argyronix"
   },
-  "homepage": "https://github.com/Argyronix/lorm"
+  "homepage": "https://github.com/Argyronix/lorm",
+  "repository": "https://github.com/Argyronix/lorm",
+  "license": "Apache-2.0",
+  "keywords": [
+    "authorization",
+    "governance",
+    "policy",
+    "audit-trail",
+    "ai-safety",
+    "autonomy",
+    "permissions",
+    "hooks"
+  ]
 }

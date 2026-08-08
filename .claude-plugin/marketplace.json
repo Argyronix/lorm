@@ -2,13 +2,34 @@
   "name": "argyronix-lorm",
   "owner": {
     "name": "Argyronix",
-    "email": "edwardfish@argyronix.com"
+    "email": "edwardfish@argyronix.com",
+    "url": "https://argyronix.com"
   },
   "plugins": [
     {
       "name": "lorm",
       "source": "./",
-      "description": "Layered Operational Responsibility Model — policy-driven authorization gate and audit trail for Claude Code"
+      "displayName": "LORM — Layered Operational Responsibility Model",
+      "description": "Authorization gate and audit trail for agent actions: what a written policy grants runs, what it does not requires approval, what it forbids is denied.",
+      "category": "security",
+      "tags": [
+        "authorization",
+        "governance",
+        "policy",
+        "audit-trail",
+        "ai-safety",
+        "autonomy",
+        "permissions",
+        "hooks"
+      ],
+      "author": {
+        "name": "Argyronix",
+        "email": "edwardfish@argyronix.com",
+        "url": "https://github.com/Argyronix"
+      },
+      "homepage": "https://github.com/Argyronix/lorm",
+      "repository": "https://github.com/Argyronix/lorm",
+      "license": "Apache-2.0"
     }
   ]
 }

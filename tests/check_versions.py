@@ -33,7 +33,8 @@ def find(pattern, text, where):
 
 # --- sources of truth -----------------------------------------------------
 
-plugin = json.loads(read(".claude-plugin/plugin.json"))["version"]
+manifest = json.loads(read(".claude-plugin/plugin.json"))
+plugin = manifest["version"]
 spec = find(r"^\*\*Specification, version ([\d.]+)\*\*", read("SPEC.md"),
             "SPEC.md")
 # The full example is the newest-features example, so its lorm_policy value
@@ -82,7 +83,29 @@ CHECKS = [
     ]),
 ]
 
+# --- the marketplace entry restates two manifest fields ------------------
+# `version` deliberately lives only in plugin.json (it wins over the entry
+# anyway, and pinning updates is a release decision, not a listing detail).
+# `displayName` and `description` must appear in the entry, because that is
+# what a marketplace browser shows before anything is installed — so they are
+# duplicated, and therefore checked.
+
+entry = json.loads(read(".claude-plugin/marketplace.json"))["plugins"][0]
+if "version" in entry:
+    sys.exit("check_versions: marketplace.json restates `version`. Keep it in "
+             "plugin.json only — two copies of a version number is the bug "
+             "this script exists to catch.")
+
 failures = []
+for field in ("displayName", "description"):
+    print(f"{field}: {manifest.get(field, '<missing>')!r}")
+    ok = entry.get(field) == manifest.get(field)
+    print(f"  {'ok  ' if ok else 'DRIFT'} marketplace.json entry")
+    if not ok:
+        failures.append(f"{field}: marketplace.json says "
+                        f"{entry.get(field)!r}, plugin.json says "
+                        f"{manifest.get(field)!r}")
+
 for line, truth, claims in CHECKS:
     print(f"{line}: {truth}")
     for where, claimed in claims:
