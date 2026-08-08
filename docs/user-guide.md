@@ -280,6 +280,23 @@ lost telemetry, errors of an unanticipated kind). LORM requires it to
 stop and report state — what's done, what remains, what's now uncertain —
 rather than improvise at the same trust level.
 
+**I updated the plugin, but it still behaves like the old version.**
+Restart the session — or run `/reload-plugins`. Hooks are external commands, and
+the path Claude Code invokes contains the version number
+(`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/hooks/scripts/…`).
+That path is resolved when the session starts, so `/plugin update` mid-session
+downloads the new files into a new directory while the running session keeps
+calling the old one. The plugin list may already show the new version, which
+makes this look like a fix that shipped and did nothing.
+
+To confirm which versions are on disk:
+
+```bash
+ls ~/.claude/plugins/cache/argyronix-lorm/lorm/
+```
+
+Older versions staying in the cache is normal.
+
 **A valid L5 policy grants the action, but the agent asked me anyway.**
 Expected, and not a bug. The two layers check different things, and the
 stricter one wins. The hook verifies what a machine can verify — the policy is
