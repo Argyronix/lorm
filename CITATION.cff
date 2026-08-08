@@ -31,10 +31,12 @@ identifiers:
       Concept DOI — always resolves to the most recent archived release. Use
       this one unless you need to pin a specific version.
   - type: doi
-    value: 10.5281/zenodo.21723238
+    value: 10.5281/zenodo.21852624
     description: >-
-      Archived snapshot of release v2.7.0 (plugin 2.7.0, specification 2.0.2,
-      policy schema 1.5).
+      Archived snapshot of release v2.7.1 — the newest archived version at the
+      time of writing (plugin 2.7.1, specification 2.0.2, policy schema 1.5).
+      Every release has its own DOI; this list carries the current one, and the
+      concept DOI above resolves to whichever is latest.
 license: Apache-2.0
 repository-code: "https://github.com/Argyronix/lorm"
 url: "https://github.com/Argyronix/lorm"
