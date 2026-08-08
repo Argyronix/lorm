@@ -1,0 +1,28 @@
+# Code owners are requested for review automatically. Review is not currently
+# enforced by a ruleset: with two maintainers and no outside contributors,
+# enforcement would only block their own direct pushes to main.
+#
+# The list is deliberately short. It covers what is normative, what is
+# distributed, and what governs the project — not everything that is published.
+# docs/, examples/ and README.md are left out on purpose: welcoming edits and
+# then demanding two-party review on a typo is friction without a return.
+#
+# Note the property this buys for free: GitHub does not let an author approve
+# their own pull request, so a change to SPEC.md written by one maintainer is
+# reviewed by the other. That is the same separation the specification itself
+# requires of policy files (SPEC 8), applied to the document that states it.
+
+# Normative and executable artifacts
+/SPEC.md                    @Argyronix/maintainers
+/schema/                    @Argyronix/maintainers
+/hooks/                     @Argyronix/maintainers
+/skills/lorm/               @Argyronix/maintainers
+
+# Distribution, CI and governance
+/.claude-plugin/            @Argyronix/maintainers
+/.github/workflows/         @Argyronix/maintainers
+/.github/CODEOWNERS         @Argyronix/maintainers
+/CONTRIBUTING.md            @Argyronix/maintainers
+/SECURITY.md                @Argyronix/maintainers
+/LICENSE                    @Argyronix/maintainers
+/NOTICE                     @Argyronix/maintainers
