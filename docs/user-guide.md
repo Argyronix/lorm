@@ -280,6 +280,27 @@ lost telemetry, errors of an unanticipated kind). LORM requires it to
 stop and report state — what's done, what remains, what's now uncertain —
 rather than improvise at the same trust level.
 
+**A valid L5 policy grants the action, but the agent asked me anyway.**
+Expected, and not a bug. The two layers check different things, and the
+stricter one wins. The hook verifies what a machine can verify — the policy is
+valid and unexpired, the command matches, the target is in bounds, the rate
+limit has room, and every `conditions[]` entry that carries a `check` command
+exits zero. Plain-string conditions are yours and the agent's: they are
+statements about the world that no shell command in the policy evaluates.
+
+So an entry whose conditions include `"cache hit rate < 20% sustained for 15
+minutes"` will be allowed by the hook, which has nothing to check there, and
+then declined by the agent if it cannot establish that the hit rate actually
+collapsed — because a condition it cannot confirm is a condition it must treat
+as unmet (SPEC §7). You get a structured L4 approval request instead of silent
+execution.
+
+If you want an action to run without a prompt, the policy entry must be
+checkable end to end: either no conditions, or conditions carrying `check`
+commands. Plain-string conditions are the right choice when a human's judgement
+genuinely belongs in the loop; they are the wrong choice if what you wanted was
+delegation.
+
 **Headless runs (`claude -p`) get blocked on L4 actions.**
 By design: no human present means no L4 authorizer. Give the recurring
 action class an L5 policy entry — that's the honest fix — or wire a
