@@ -70,11 +70,27 @@ Lines). Fields per `audit.record_fields`; the SPEC §10.3 minimum:
 For L4, `authorizer` is the approving human: `"human:edward (this session)"`.
 Write the record even when verification failed — especially then.
 
+**`timestamp` is UTC.** Do not compute it and do not read it off the local
+clock; ask the machine:
+
+```bash
+date -u +%Y-%m-%dT%H:%M:%SZ
+```
+
+The `Z` is an assertion, not decoration. A record stamped in local time but
+suffixed `Z` lands in the wrong hour, and `max_actions_per_hour` is evaluated
+by comparing these strings against a UTC window — so a wrong offset either
+inflates the count or lets executions escape it. The hook always writes UTC;
+records you append must agree with the ones next to them.
+
 ## Coexistence with the enforcement hook
 
-The LORM plugin's PostToolUse hook writes execution records automatically
-and touches **`.lorm/hook-active`** on first append. When that marker
-exists:
+The LORM plugin's PostToolUse hook writes execution records automatically.
+The PreToolUse hook creates **`.lorm/hook-active`** on the first gated call in
+a project — before your action runs, so the marker is already there when you
+check. (Until 2.7.1 it appeared only on the hook's first audit append, which
+lost a race with this check in a fresh project and produced duplicate
+execution records.) When that marker exists:
 
 - do NOT append execution records yourself — the hook already did, and a
   duplicate would double-count against `max_actions_per_hour`;

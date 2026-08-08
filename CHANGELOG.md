@@ -3,6 +3,39 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.7.1 — 2026-08-08
+
+Two defects found by installing the plugin from the marketplace into an empty
+project and taking one action — the thing CI structurally cannot do.
+
+### Fixed
+- `.lorm/hook-active` is now created by the **pre** hook on the first gated
+  call, not by the post hook on its first audit append. The skill checks for
+  that marker in the same turn as the action it just took, and in a fresh
+  project the post-side append had not landed yet: the skill concluded no hook
+  was running and appended its own execution record beside the hook's. Two
+  records for one action, and `max_actions_per_hour` spent twice as fast — a
+  capability limited to 2 per hour lost half its quota to a single action. The
+  race fired exactly once per project, on the first authorized action, which is
+  also the first thing a new user does. Marker writing is best-effort and
+  wrapped: bookkeeping never affects a decision.
+- 6 new checks (119 total), including that the marker exists after the pre call
+  and before any audit record, that it appears even when the decision is
+  silence, and that a project with no policy file still gets no marker at all.
+
+### Changed
+- The skill now takes `timestamp` from `date -u +%Y-%m-%dT%H:%M:%SZ` and both
+  skill documents say plainly that the field is UTC. Nothing had said so, and
+  the model stamped local time with a `Z` suffix — three hours off, in a field
+  the rate-limit window is computed from. The hook was always correct here; the
+  skill's manually written records were not.
+
+### Notes
+- No schema change; `SPEC.md` unchanged. Policies and audit logs written by
+  earlier versions stay valid, including logs that already contain a duplicate
+  pair — `/lorm:lorm-review` counts them as written, so a capability that
+  looks close to its rate limit may simply be carrying one.
+
 ## 2.7.0 — 2026-07-21
 
 Outside-project writes can now be claimed by policy. Closes the asymmetry

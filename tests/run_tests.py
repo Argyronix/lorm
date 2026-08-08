@@ -389,6 +389,36 @@ def test_fail_closed():
     shutil.rmtree(shim)
 
 
+def test_hook_active_marker():
+    print("hook-active marker announces at gate time")
+
+    # Regression: the marker used to be written on the first audit append, so
+    # in a fresh project the skill checked for it in the same turn as its
+    # action, found nothing, and appended a duplicate execution record —
+    # double-counting the rate limit. It must exist after the pre call, before
+    # anything has been executed or recorded.
+    p = make_project(BASE_L5)
+    marker = os.path.join(p, ".lorm", "hook-active")
+    audit = os.path.join(p, ".lorm", "audit.jsonl")
+    check("no marker before the first call", not os.path.exists(marker), "")
+    rc, d, r, err = run_gate("pre", bash_payload("rm -rf build", p), p)
+    check("marker exists after the pre call", os.path.exists(marker), err)
+    check("marker precedes any audit record", not os.path.exists(audit), "")
+    check("pre decision unaffected", d == "allow", f"{d} {r}")
+
+    # A gated call the policy does not match still means the hook is live.
+    p2 = make_project(BASE_L5)
+    run_gate("pre", bash_payload("echo hello", p2), p2)
+    check("marker written even when the decision is silence",
+          os.path.exists(os.path.join(p2, ".lorm", "hook-active")), "")
+
+    # No policy file: the hook is passive and must leave no trace at all.
+    p3 = make_project(policy_yaml=None)
+    run_gate("pre", bash_payload("rm -rf build", p3), p3)
+    check("no marker without a policy",
+          not os.path.exists(os.path.join(p3, ".lorm", "hook-active")), "")
+
+
 def test_post_audit():
     print("post: audit records")
     p = make_project(BASE_L5)
@@ -1177,7 +1207,8 @@ def main():
     for fn in (test_passive, test_l5_allow_and_degrades, test_rate_limit,
                test_l4_l3_and_defaults, test_compound_and_wrappers,
                test_write_paths, test_self_protection, test_fail_closed,
-               test_post_audit, test_mcp, test_executable_conditions,
+               test_hook_active_marker, test_post_audit, test_mcp,
+               test_executable_conditions,
                test_review, test_multi_cap, test_mechanical_verification,
                test_observations, test_discover, test_outside_project_match):
         fn()

@@ -1,7 +1,7 @@
 {
   "name": "lorm",
   "displayName": "LORM — Layered Operational Responsibility Model",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "Authorization gate and audit trail for agent actions: what a written policy grants runs, what it does not requires approval, what it forbids is denied.",
   "author": {
     "name": "Argyronix",

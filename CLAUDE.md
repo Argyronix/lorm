@@ -64,9 +64,12 @@ runtime, which the runner then forces onto the new one, warning once per job.
   dangerous sibling (`rm -rf build && rm -rf /`). Don't "optimize" this
   back to whole-command matching.
 - **Audit log is append-only** (SPEC I-6): hook denies truncation.
-  Hook-vs-skill dedup: the hook writes execution records and touches
-  `.lorm/hook-active`; the skill then writes only verification records
-  (`x-verifies`). Rate limits count execution records only.
+  Hook-vs-skill dedup: the hook writes execution records, and the **pre**
+  path creates `.lorm/hook-active` on the first gated call so the marker is
+  already there when the skill checks it in the same turn; the skill then
+  writes only verification records (`x-verifies`). Rate limits count
+  execution records only. Moving the marker back to the first audit append
+  reintroduces the 2.7.1 duplicate-record race — don't.
 - **No conditions DSL.** Executable conditions are human-authored shell
   `check` commands (schema 1.3), deliberately. If formal evaluation is
   ever needed, integrate OPA — do not invent an expression language.
@@ -82,7 +85,7 @@ runtime, which the runner then forces onto the new one, warning once per job.
 - Version discipline: bump `.claude-plugin/plugin.json` and add a
   CHANGELOG entry together; spec (SPEC.md) is versioned separately
   (semver, currently 2.0.2) from the plugin. Three version lines exist and
-  drift apart easily — plugin (`plugin.json`, currently 2.7.0), spec
+  drift apart easily — plugin (`plugin.json`, currently 2.7.1), spec
   (`SPEC.md`), policy schema (`lorm_policy`) — so when one changes, check
   what README.md's "Status and roadmap" claims about all three.
 - Engine code: stdlib-only; PyYAML imported lazily and only for YAML

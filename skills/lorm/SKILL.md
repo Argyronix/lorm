@@ -133,7 +133,10 @@ depth of diagnostics, never their existence.
   done — skip this step for that record unless you have contrary evidence,
   in which case append a superseding verification record.
 - Otherwise (no hook), append the full execution record yourself with the
-  fields listed in `audit.record_fields`.
+  fields listed in `audit.record_fields`. Take `timestamp` from
+  `date -u +%Y-%m-%dT%H:%M:%SZ` — it must be UTC, because rate limits are
+  evaluated against a UTC window and a local time wearing a `Z` lands in the
+  wrong hour.
 - A failed verification on an L5 action: stop further executions of that
   capability this session, report, and propose a demotion entry (step 8).
 

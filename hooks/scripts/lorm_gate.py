@@ -668,6 +668,7 @@ def decide_pre(payload):
 
     policy = load_policy(policy_path)  # PolicyError handled by caller
     audit_path = audit_log_path(policy, project_root)
+    touch_hook_active(audit_path)
     now = utc_now()
 
     bash_texts, bash_segments = [], None
@@ -771,15 +772,36 @@ def append_jsonl(path, record):
             fh.write(line)
 
 
+def touch_hook_active(audit_path):
+    """Tell soft consumers the hook is live here.
+
+    Written on the first gated pre call, not on the first audit append. The
+    skill checks for this marker in the same turn as the action it just took,
+    and in a fresh project the post-side append had not landed yet — so the
+    skill concluded no hook was running and appended its own execution record,
+    duplicating the hook's and double-counting the rate limit. Announcing at
+    gate time removes the race: by the time the model can look, the marker is
+    there. Best-effort by design — bookkeeping must never affect a decision.
+    """
+    directory = os.path.dirname(audit_path) or "."
+    marker = os.path.join(directory, "hook-active")
+    if os.path.exists(marker):
+        return
+    try:
+        os.makedirs(directory, exist_ok=True)
+        with open(marker, "w", encoding="utf-8") as fh:
+            fh.write(
+                "LORM enforcement hook is active in this project.\n"
+                "Soft consumers (the agent skill) must append only "
+                "verification records, not execution records. See "
+                "skills/lorm/references/policy-format.md.\n")
+    except OSError:
+        pass
+
+
 def append_audit(audit_path, record):
     append_jsonl(audit_path, record)
-    marker = os.path.join(os.path.dirname(audit_path), "hook-active")
-    if not os.path.exists(marker):
-        open(marker, "w", encoding="utf-8").write(
-            "LORM enforcement hook is active in this project.\n"
-            "Soft consumers (the agent skill) must append only verification "
-            "records, not execution records. See skills/lorm/references/"
-            "policy-format.md.\n")
+    touch_hook_active(audit_path)
 
 
 def summarize_action(tool, tool_input):

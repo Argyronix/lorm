@@ -21,7 +21,7 @@ authors:
     email: "contact@argyronix.com"
 # `version` is the SPECIFICATION version (SPEC.md), which is what citing work
 # refers to. The plugin implementing it versions independently and is currently
-# at 2.7.0; the policy schema is at 1.5. See README.md "Status and roadmap".
+# at 2.7.1; the policy schema is at 1.5. See README.md "Status and roadmap".
 version: 2.0.2
 date-released: "2026-07-19"
 identifiers:

@@ -150,9 +150,9 @@ that accumulates executions with nothing verified is a stalled trust lifecycle, 
 
 ## Status and roadmap
 
-- Specification 2.0.2, the agent skill, and the enforcement plugin 2.7.0
+- Specification 2.0.2, the agent skill, and the enforcement plugin 2.7.1
   (PreToolUse gate + PostToolUse audit, policy schema 1.5):
-  **this repository, working and tested** — 113 tests, run in CI on Python
+  **this repository, working and tested** — 119 tests, run in CI on Python
   3.10 through 3.14. The engine needs the standard library and nothing else;
   PyYAML is required only to read YAML policy files, and CI proves a JSON
   policy is enforced without it. `validate_policy.py` additionally needs
