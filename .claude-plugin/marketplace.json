@@ -1,5 +1,6 @@
 {
   "name": "argyronix-lorm",
+  "description": "The reference implementation of LORM, the Layered Operational Responsibility Model — a specification that grades an agent's authority to act by who authorized the action. One plugin: the agent skill and the enforcement hooks that make the authorization boundary deterministic.",
   "owner": {
     "name": "Argyronix",
     "email": "edwardfish@argyronix.com",
