@@ -1,4 +1,10 @@
-blank_issues_enabled: false
+# Blank issues stay enabled because SUPPORT.md tells people to open one for a
+# general question and promises it will be relabelled if it is neither a bug
+# nor a feature request. With blank issues off, that promise cannot be kept:
+# the chooser offers only the two templates, and someone with a question has
+# to misfile it as one of them. The templates remain the first thing the
+# chooser shows, so structured reports are still the default path.
+blank_issues_enabled: true
 contact_links:
   - name: Read the user guide first
     url: https://github.com/Argyronix/lorm/blob/main/docs/user-guide.md
