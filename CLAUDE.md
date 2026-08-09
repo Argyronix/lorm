@@ -112,6 +112,72 @@ runtime, which the runner then forces onto the new one, warning once per job.
   `docs/hard-enforcement.md`; lifecycle tooling `docs/trust-lifecycle.md`;
   positioning `docs/related-work.md`; motivation `RATIONALE.md`.
 
+## Branch protection
+
+`main` is governed by a repository ruleset — id `20127869`, "main: no deletion
+or force-push, PR with code-owner review and CI" — not classic branch
+protection. The two briefly coexisted after `engineering` got Write access;
+classic protection was removed once its rules were folded into the ruleset so
+there is one place to look, not two. Cite the **id** when it matters: names get
+edited, and this one already lagged its contents once.
+
+Rules on the ruleset: `deletion` and `non_fast_forward` (no deleting or
+force-pushing `main`); `pull_request` (1 approving review, dismiss stale
+reviews on push, `require_code_owner_review: true` — the mechanism that
+makes `.github/CODEOWNERS` matter, since GitHub won't let an author approve
+their own PR, so a `SPEC.md` change by one maintainer needs the other);
+`required_status_checks` naming every `tests.yml` job by its `name:` field,
+verbatim:
+
+```
+suite (Python 3.10) … suite (Python 3.14)
+version claims agree
+policy examples validate
+JSON policy works without PyYAML
+```
+
+If a job's `name:` changes, update this list in the same change — an
+unmatched context leaves PRs waiting forever on a check that will never
+report.
+
+`bypass_actors` grants the `maintainers` team (`EddFish`, `leofrid`) an
+`always` bypass — that is what keeps the direct `git push origin main` in
+Releasing below working. Everyone else, including `engineering` (Write
+access to push branches, not to bypass rules on `main`), must go through a
+PR that clears review and CI.
+
+So the code-owner guarantee above holds for **changes that arrive as a pull
+request**, which is every change except a maintainer's direct push. A
+maintainer pushing `SPEC.md` straight to `main` gets no review at all. That is
+the price of keeping the release flow, and it is deliberate — but it means the
+four-eyes property on normative text is a convention between the two
+maintainers, enforced by the tooling only when they choose to use it. Deletion
+and force-push have no bypass and are enforced against everyone.
+
+Both rulesets belong to this repository, not to the organization: org-level
+rulesets need a paid GitHub plan, and the Argyronix organization is on the free
+one (`GET /orgs/Argyronix/rulesets` answers "Upgrade to GitHub Team"). So there
+is nothing to inherit — a second repository, when the open-source client lands
+on GitHub, will start with no protection at all and needs its own rules copied
+across. Update them with `PUT` on `/repos/{owner}/{repo}/rulesets/{id}`; `PATCH`
+is not a route there and answers 404, which reads like a permissions problem and
+is not one.
+
+Tags have their own ruleset — id `20127986`, "v* tags: no deletion or
+force-push", targeting `refs/tags/v*` with `deletion` and `non_fast_forward`
+and no bypass. It is what makes "one tag per version, on the commit that cut
+it" enforceable rather than aspirational: a published version reference cannot
+be moved to point somewhere else, which is the property the DOIs and the
+`Validated against:` lines in other repositories depend on.
+
+Two ruleset settings are deliberately off. `strict_required_status_checks_policy`
+is `false`, so CI is not required to have run against the *merge result* — a
+branch can pass, sit while `main` moves, and merge untested-in-combination. At
+this traffic that trade is worth the absence of rebase churn; revisit it if two
+people start landing changes on the same day. `require_last_push_approval` is
+`false`, which `dismiss_stale_reviews_on_push` already covers for the case that
+matters.
+
 ## Releasing
 
 Users install via `/plugin marketplace add Argyronix/lorm` →
