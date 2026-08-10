@@ -706,6 +706,22 @@ def test_review():
           and out["stats"]["db.index.create"]["pending"] == 0,
           str(out["stats"]))
 
+    # A record with neither action nor x-verifies must be visible in hygiene,
+    # not silently discarded from the trust-lifecycle evidence.
+    malformed_timestamps = [ts_ago(hours=12 + i) for i in range(4)]
+    seed_records(p3, [{"timestamp": timestamp,
+                       "capability": "db.index.create",
+                       "x-writer": "lorm-skill", "verified": "verified"}
+                      for timestamp in malformed_timestamps])
+    out = run_review(p3)
+    check("malformed audit records name every timestamp without affecting execution stats",
+          out["stats"]["db.index.create"]["verified"] == 1
+          and any(all(timestamp in h["issue"] for timestamp in malformed_timestamps)
+                  and "4 malformed record(s)" in h["issue"]
+                  and "neither action nor x-verifies" in h["issue"]
+                  for h in out["findings"]["hygiene"]),
+          str(out["findings"]))
+
     # low verification coverage -> hygiene, not promotion
     p4 = make_project(L4_ENTRY)
     seed_records(p4, [exec_rec("db.index.create", ts_ago(days=i + 1))
