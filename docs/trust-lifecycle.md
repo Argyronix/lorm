@@ -26,7 +26,7 @@ analyzer and presents the drafts as reviewable diffs.
 | **Promotion candidates** | ≥ `min-track` *verified* executions, 0 failures, not demoted, not already L5 (SPEC 6-2/6-3) | Draft L5 policy entry: track record cited in `tested`, expiry +90d, rate limit derived from observed peak (×2), `match`/`bounds` inherited from the existing L4 entry, `DRAFT` placeholders for author/approver |
 | **Demotion proposals** | failed verification with no active demotion (SPEC 6-5) | Draft `demotions[]` entry naming the failure |
 | **Expiry** | L5 policy expired or expiring ≤ 14d (SPEC 8-2) | Renewal reminder with the verification summary a renewal review needs |
-| **Hygiene** | executions ≥ track but verification coverage too low (I-7); recurring approvals with no policy entry; corrupt audit lines | What blocks the lifecycle from progressing, and why |
+| **Hygiene** | executions ≥ track but verification coverage too low (I-7); recurring approvals with no policy entry; corrupt or malformed audit lines | What blocks the lifecycle from progressing, and why |
 | **Discovery** (`lorm_discover.py`, 2.6.0+) | recurring *unclassified* actions — calls no capability or classifier ever saw, clustered from `.lorm/observations.jsonl` by normalized shape | Draft capability entry at ≤ L3 (SPEC 4-3) with a derived `match` block and a verification-gap note |
 
 Two properties worth noting:
@@ -45,6 +45,11 @@ with no agent step involved; and when a capability's unsuperseded pending
 count reaches 10/25/50/100 with zero verified, the post hook emits a
 one-line `systemMessage` — you learn that lifecycle progress has stalled
 without having to run this review first.
+
+Malformed audit records are reported in **Hygiene** and ignored for lifecycle
+statistics. A record must be either an execution (`action`) or a verification
+(`x-verifies`). The review output names every affected timestamp so a human can
+inspect the append-only log; it never repairs or reinterprets those records.
 
 ## Propose, never enact
 

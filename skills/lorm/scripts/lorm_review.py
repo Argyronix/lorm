@@ -111,9 +111,19 @@ def analyze(policy, records, now, window_days, min_track):
                         if isinstance(d, dict)}
 
     parse_errors = [r["x-parse-error"] for r in records if "x-parse-error" in r]
+    malformed = []
     executions, verifications = {}, {}
     for rec in records:
         if "x-parse-error" in rec:
+            continue
+        # A record is either an execution (action) or a verification
+        # (x-verifies). Keep malformed records visible instead of silently
+        # excluding them from the trust-lifecycle evidence.
+        if "x-verifies" not in rec and not rec.get("action"):
+            malformed.append({
+                "timestamp": rec.get("timestamp"),
+                "capability": rec.get("capability"),
+            })
             continue
         ts = parse_ts(rec.get("timestamp"))
         if ts is None or ts < cutoff:
@@ -271,6 +281,19 @@ def analyze(policy, records, now, window_days, min_track):
             "issue": (f"{len(parse_errors)} unparseable line(s) "
                       f"({', '.join(parse_errors[:3])}…) — the enforcement "
                       f"hook degrades L5 to L4 while the log is corrupt"),
+        })
+
+    if malformed:
+        timestamps = ", ".join(
+            str(r["timestamp"] or "<missing timestamp>") for r in malformed
+        )
+        findings["hygiene"].append({
+            "capability": "(audit log)",
+            "issue": (
+                f"{len(malformed)} malformed record(s) with neither action nor "
+                f"x-verifies ({timestamps}) — ignored for lifecycle "
+                "stats; inspect the append-only audit log, do not rewrite it"
+            ),
         })
 
     return stats, findings
