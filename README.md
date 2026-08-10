@@ -81,7 +81,7 @@ grow toward
 [`full.lorm-policy.yaml`](schema/examples/full.lorm-policy.yaml). Validate:
 
 ```bash
-python3 skills/lorm/scripts/validate_policy.py lorm-policy.yaml
+python3 skills/lorm/scripts/validate_policy.py lorm-policy.yaml   # needs jsonschema >= 4
 ```
 
 ## What the hook decides
@@ -156,7 +156,7 @@ that accumulates executions with nothing verified is a stalled trust lifecycle, 
   3.10 through 3.14. The engine needs the standard library and nothing else;
   PyYAML is required only to read YAML policy files, and CI proves a JSON
   policy is enforced without it. `validate_policy.py` additionally needs
-  `jsonschema`.
+  `jsonschema >= 4`.
 - What CI cannot cover: whether Claude Code itself wires the hooks and loads
   the plugin correctly. That is verified by hand
   (`claude --plugin-dir . -p "…"`), and the 2.4.1 fix — a duplicate hooks

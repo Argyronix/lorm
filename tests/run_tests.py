@@ -628,6 +628,7 @@ def test_executable_conditions():
 
 
 REVIEW = os.path.join(REPO, "skills", "lorm", "scripts", "lorm_review.py")
+VALIDATOR = os.path.join(REPO, "skills", "lorm", "scripts", "validate_policy.py")
 
 
 def run_review(project, *extra):
@@ -732,6 +733,26 @@ def test_review():
 
     for x in (p, p2, p3, p4, p5, p6):
         shutil.rmtree(x)
+
+
+def test_validator_environment():
+    print("validator environment")
+    project = make_project(L4_ENTRY)
+    fake_modules = tempfile.mkdtemp(prefix="lorm-jsonschema3-")
+    open(os.path.join(fake_modules, "jsonschema.py"), "w").write(
+        "# Deliberately models jsonschema 3.x: no Draft202012Validator.\n"
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = fake_modules + os.pathsep + env.get("PYTHONPATH", "")
+    proc = subprocess.run(
+        [sys.executable, VALIDATOR, os.path.join(project, "lorm-policy.yaml")],
+        capture_output=True, text=True, env=env, timeout=30,
+    )
+    check("jsonschema <4 reports an actionable environment error",
+          proc.returncode == 2 and "jsonschema >= 4 is required" in proc.stderr,
+          f"rc={proc.returncode}, stderr={proc.stderr!r}")
+    shutil.rmtree(project)
+    shutil.rmtree(fake_modules)
 
 
 def add_caps(base, caps_yaml):
@@ -1209,7 +1230,8 @@ def main():
                test_write_paths, test_self_protection, test_fail_closed,
                test_hook_active_marker, test_post_audit, test_mcp,
                test_executable_conditions,
-               test_review, test_multi_cap, test_mechanical_verification,
+               test_review, test_validator_environment, test_multi_cap,
+               test_mechanical_verification,
                test_observations, test_discover, test_outside_project_match):
         fn()
     print(f"\n{PASS} passed, {len(FAIL)} failed")
