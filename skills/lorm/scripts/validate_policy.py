@@ -42,6 +42,9 @@ try:
 except ImportError:
     fail_env("jsonschema is required: pip install jsonschema")
 
+if not hasattr(jsonschema, "Draft202012Validator"):
+    fail_env("jsonschema >= 4 is required: pip install 'jsonschema>=4'")
+
 
 def find_schema(policy_path: Path, explicit: str | None) -> Path:
     if explicit:

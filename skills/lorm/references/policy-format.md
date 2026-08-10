@@ -13,7 +13,7 @@ epistemic actions (L0–L2) are ungated.
 
 Optionally validate before relying on it:
 `python3 scripts/validate_policy.py <policy.yaml>` (needs pyyaml +
-jsonschema). A schema-invalid file → treat as absent and tell the user.
+`jsonschema >= 4`). A schema-invalid file → treat as absent and tell the user.
 
 ## Matching an action class
 

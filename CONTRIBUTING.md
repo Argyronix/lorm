@@ -37,7 +37,7 @@ are answered per [`SUPPORT.md`](SUPPORT.md).
 
 Python 3.10 through 3.14 are supported and all are exercised in CI. The engine
 needs the standard library only. PyYAML is required to read YAML policy files;
-`jsonschema` is required by the validator.
+`jsonschema >= 4` is required by the validator.
 
 ```bash
 python3 tests/run_tests.py                  # the suite — must be green
