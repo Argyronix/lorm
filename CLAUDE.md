@@ -28,7 +28,20 @@ python3 tests/run_tests.py            # full suite (subprocess-driven, no pytest
 python3 skills/lorm/scripts/validate_policy.py schema/examples/full.lorm-policy.yaml
 python3 skills/lorm/scripts/validate_policy.py schema/examples/minimal.lorm-policy.yaml
 python3 tests/check_versions.py       # version claims in prose vs. their sources
+python3 tests/check_release_drift.py  # shipped code vs. the newest tag (not a PR gate)
 ```
+
+`check_versions.py` compares numbers with numbers and is one of the eight
+required status checks; it reads files only, which is why it is cheap and safe
+to require. `check_release_drift.py` compares *code* with the newest tag, needs
+git history and tags (`fetch-depth: 0`), and runs weekly from
+`.github/workflows/release-drift.yml` rather than on pull requests — merging a
+fix before releasing it is correct, so a gate there would go red on good work.
+It fails when shipped paths (`hooks/`, `skills/`, `schema/`, `commands/`,
+`.claude-plugin/`) have commits older than 14 days with no version bump, or
+when `plugin.json` claims a version that was never tagged. It exists because
+2.7.1→2.7.2 took six weeks and nothing noticed: `check_versions.py` was green
+throughout, because the numbers it compares agreed with each other.
 
 All tests green is the bar for every engine/schema change. Tests create
 temp projects under `$TMPDIR`. Engine changes without a covering test are

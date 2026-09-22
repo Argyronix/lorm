@@ -1,0 +1,39 @@
+name: release drift
+
+# Deliberately not part of tests.yml and deliberately not a required check.
+# Merging a fix before releasing it is correct — CONTRIBUTING.md asks
+# contributors not to bump the version — so a gate on pull requests would go
+# red on good work and be ignored within a month. What this watches for is the
+# forgetting: shipped code that has outrun its version long enough that new
+# installs and existing ones are running different things under one number.
+#
+# A failed scheduled run notifies the maintainer by email, which is all the
+# reminder this needs. The job has read-only permissions and files nothing.
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays, 07:00 UTC
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Grace period in days
+        required: false
+        default: "14"
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: unreleased shipped changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # tags and full history — the whole point of the check
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - run: python3 tests/check_release_drift.py --days "${DAYS:-14}"
+        env:
+          DAYS: ${{ inputs.days }}
