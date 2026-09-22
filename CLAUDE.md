@@ -85,7 +85,7 @@ runtime, which the runner then forces onto the new one, warning once per job.
 - Version discipline: bump `.claude-plugin/plugin.json` and add a
   CHANGELOG entry together; spec (SPEC.md) is versioned separately
   (semver, currently 2.0.2) from the plugin. Three version lines exist and
-  drift apart easily — plugin (`plugin.json`, currently 2.7.1), spec
+  drift apart easily — plugin (`plugin.json`, currently 2.7.2), spec
   (`SPEC.md`), policy schema (`lorm_policy`) — so when one changes, check
   what README.md's "Status and roadmap" claims about all three.
 - Engine code: stdlib-only; PyYAML imported lazily and only for YAML

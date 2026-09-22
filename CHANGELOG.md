@@ -3,6 +3,36 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.7.2 — 2026-09-22
+
+Two defects filed after the 2.7.1 verification round, both fixed by
+contributed pull requests — the first changes in this repository that did not
+come from a maintainer.
+
+### Fixed
+- `/lorm:lorm-review` no longer drops audit records silently. A record must be
+  either an execution (`action`) or a verification (`x-verifies`); anything
+  matching neither was skipped by the analyzer without a word, so a
+  verification the agent skill meant to write could disappear and take a
+  capability's promotion evidence with it — leaving the capability reported as
+  stalled while the evidence sat in the log. Malformed records now surface
+  under **Hygiene**, named by timestamp, and stay excluded from lifecycle
+  statistics. They are never repaired or reinterpreted: a record whose meaning
+  has to be guessed is not evidence, and rewriting the log would violate I-6
+  and I-8 both (#3, #4).
+- `validate_policy.py` states its requirement instead of crashing on it. The
+  validator uses `jsonschema.Draft202012Validator`, which does not exist in the
+  3.x series, so an outdated install produced a bare `AttributeError` traceback
+  — while a *missing* install had always produced a usable message. The version
+  floor is now checked at import and routed through the same path, and
+  `jsonschema >= 4` is stated in `CONTRIBUTING.md`, `README.md` and the skill's
+  policy-format reference (#2, #5).
+
+### Notes
+- No schema change; `SPEC.md` unchanged. 121 tests (8 new), all green.
+- Nothing in the enforcement hook changed — both fixes are in the skill's
+  scripts, so the authorization path is byte-identical to 2.7.1.
+
 ## 2.7.1 — 2026-08-08
 
 Two defects found by installing the plugin from the marketplace into an empty
