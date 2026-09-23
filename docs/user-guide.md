@@ -280,6 +280,27 @@ lost telemetry, errors of an unanticipated kind). LORM requires it to
 stop and report state — what's done, what remains, what's now uncertain —
 rather than improvise at the same trust level.
 
+**`/plugin` shows "lorm@… not loaded — lorm@… has the same name and takes
+precedence".**
+Nothing is broken. A plugin's `name` is its unique key, so when the same plugin
+arrives from two places — a marketplace you added, the community catalog, or a
+copy synced from claude.ai — only one can load, and Claude Code reports the
+other under Errors. The loaded one is the one in effect; the message is
+de-duplication, not a failure.
+
+This plugin is more likely than most to produce it, because `lorm` is
+installable from more than one source. If you want a single copy, keep the one
+whose update path you control and remove the other:
+
+```bash
+claude plugin list                       # which sources you have, and which loaded
+claude plugin enable lorm@<source>       # switch, then remove the other one
+```
+
+There is no way to make two copies coexist under different names: the `name` in
+`plugin.json` is a fixed slug, and renaming it would break every existing
+install.
+
 **I updated the plugin, but it still behaves like the old version.**
 Restart the session — or run `/reload-plugins`. Hooks are external commands, and
 the path Claude Code invokes contains the version number
