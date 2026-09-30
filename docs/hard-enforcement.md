@@ -35,6 +35,29 @@ that copy to avoid loading it twice.
 they emit no opinion and Claude Code's normal permission flow applies
 unchanged. Hard enforcement switches on when a policy file appears.
 
+### Where the hook looks for the policy
+
+The hook resolves the project root once per call, in this order:
+`CLAUDE_PROJECT_DIR`, then the `cwd` field of the hook payload, then the
+process working directory. It then looks for `lorm-policy.yaml`,
+`lorm-policy.json` or `.lorm/policy.yaml` **in that root only**. It does not
+search parent directories, and it does not look next to the file being
+written: a policy beside `docs/notes.md` governs nothing unless the session's
+project root is that same directory.
+
+This is why the plugin is listed only for Claude Code. On surfaces where the
+session's working directory is not a folder the user controls, there is no
+place to put a policy the hook would find, so the hard layer stays passive
+while the skill still loads:
+
+- **Cowork** (tested 2026-09-30): the working directory is a private
+  per-session folder the agent cannot write to. A canary policy placed in a
+  connected folder was not enforced, and no `.lorm/` file changed. The test
+  cannot tell whether Cowork runs plugin hooks at all — both answers leave
+  the same trace — only that enforcement does not happen.
+- **Claude apps** (web, desktop, mobile): the plugin directory states that
+  hooks are not used there.
+
 ## Threat model — read this first
 
 Silent pass-through is never "auto-run": when the gate has no opinion, the

@@ -3,6 +3,26 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.7.3 — 2026-09-30
+
+No engine change. The release adds an icon and records where the plugin does
+and does not enforce anything.
+
+### Added
+- `assets/icon.png` (512×512) and an `icon` field in `plugin.json`, requested
+  by the Claude plugin directory's validation ("No icon"). The Claude Code
+  manifest reference does not list `icon` yet, but `claude plugin validate`
+  (Claude Code 2.1.284) accepts it without the "Unknown field" warning it
+  gives other unlisted keys. Nothing in the plugin's behavior changes.
+
+### Documentation
+- `docs/hard-enforcement.md` states how the hook finds the policy: in the
+  project root only (`CLAUDE_PROJECT_DIR`, then the payload `cwd`), never in
+  a parent directory and never next to the file being written. It also
+  records why the hard layer is passive in Cowork (tested 2026-09-30) and in
+  Claude apps, which is why the directory now lists the plugin for Claude
+  Code only.
+
 ## 2.7.2 — 2026-09-22
 
 Two defects filed after the 2.7.1 verification round, both fixed by

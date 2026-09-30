@@ -150,7 +150,7 @@ that accumulates executions with nothing verified is a stalled trust lifecycle, 
 
 ## Status and roadmap
 
-- Specification 2.0.2, the agent skill, and the enforcement plugin 2.7.2
+- Specification 2.0.2, the agent skill, and the enforcement plugin 2.7.3
   (PreToolUse gate + PostToolUse audit, policy schema 1.5):
   **this repository, working and tested** — 121 tests, run in CI on Python
   3.10 through 3.14. The engine needs the standard library and nothing else;

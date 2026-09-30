@@ -98,7 +98,7 @@ runtime, which the runner then forces onto the new one, warning once per job.
 - Version discipline: bump `.claude-plugin/plugin.json` and add a
   CHANGELOG entry together; spec (SPEC.md) is versioned separately
   (semver, currently 2.0.2) from the plugin. Three version lines exist and
-  drift apart easily — plugin (`plugin.json`, currently 2.7.2), spec
+  drift apart easily — plugin (`plugin.json`, currently 2.7.3), spec
   (`SPEC.md`), policy schema (`lorm_policy`) — so when one changes, check
   what README.md's "Status and roadmap" claims about all three.
 - Engine code: stdlib-only; PyYAML imported lazily and only for YAML
@@ -185,15 +185,83 @@ be moved to point somewhere else, which is the property the DOIs and the
 
 Two ruleset settings are deliberately off. `strict_required_status_checks_policy`
 is `false`, so CI is not required to have run against the *merge result* — a
-branch can pass, sit while `main` moves, and merge untested-in-combination. At
-this traffic that trade is worth the absence of rebase churn; revisit it if two
-people start landing changes on the same day. `require_last_push_approval` is
-`false`, which `dismiss_stale_reviews_on_push` already covers for the case that
-matters.
+branch can pass, sit while `main` moves, and merge untested-in-combination.
+`require_last_push_approval` is `false`, which `dismiss_stale_reviews_on_push`
+already covers for the case that matters.
+
+**The condition for revisiting the first one has been met.** It was left off
+with the note "revisit it if two people start landing changes on the same day",
+which was about collision risk between maintainers. The real change is larger:
+since 2026-09-23 the plugin directory serves `main` to strangers (see
+Releasing). Automatic publishing was switched off on 2026-09-30, so a merge no
+longer goes live without a click. But the click publishes whatever the commit
+contains, and an untested merge result still reaches people outside this
+repository once someone publishes it. Two things follow, neither of them done
+yet:
+
+- Turning `strict_required_status_checks_policy` on costs an occasional rebase
+  and removes the case where CI passed on something that is not what landed.
+- The `always` bypass for `maintainers` now skips review *and* CI on a path that
+  ends at other people's machines. It was a deliberate trade for keeping the
+  release flow; it is a more expensive trade than it was when it was made.
+  Keeping it is defensible, but it should be kept on purpose, not by inertia.
 
 ## Releasing
 
-Users install via `/plugin marketplace add Argyronix/lorm` →
+**`main` is what the Claude plugin directory serves to strangers.** The plugin
+has been live there since 2026-09-23 (submitted Aug 8, security scan Sep 23,
+published by a reviewer). The directory reads this repository's default
+branch and rescans it about every six hours (no push webhook is set up). Each
+new commit that passes the directory's checks appears on the Versions tab as a
+candidate.
+
+Settings as of 2026-09-30, set by a maintainer in the directory's Settings tab:
+
+- **"Publish new versions automatically" is off.** It was on until 2026-09-30,
+  which let a commit go live with no click here. Now a candidate goes live only
+  after "Publish update", and even then an Anthropic reviewer may have to act
+  first. That click is the release event for the directory. Keep it matched to
+  a `plugin.json` version bump.
+- **Listed on Claude Code only.** Cowork and Claude apps were unchecked, because
+  the hard layer is passive there (see `docs/hard-enforcement.md` §"Where the
+  hook looks for the policy"). Do not use "List everywhere it works": it adds
+  those surfaces back.
+- "This plugin collects or transmits user data" is off, which matches
+  `PRIVACY.md`.
+
+Usage through 2026-09-28, from the Usage tab: 102 installs by 85 accounts, 788
+loads in 630 sessions, 0 load errors, 0 uninstalls. Also **0 active accounts
+and 0 uses**. People install the plugin, and nobody has used it yet. The likely
+reason, which is not verified: without a policy file the plugin does nothing
+visible, so an install with no policy looks the same as no install. Count
+installs as reach, never as adoption. The Directory funnel table shows 0
+listing views next to 72 installs from the plugin page, so do not rely on it.
+
+Until late September, a bad commit on `main` cost us a bad commit on `main`.
+Now, once it is published, it reaches people who never asked us for anything.
+
+Consequences worth naming rather than rediscovering:
+
+- The version-pinning rules below still govern *marketplace* installs, but they
+  do not govern the directory, which tracks commits rather than the `version`
+  field. A docs-only push that reaches "new installs and nobody else" through
+  the marketplace can still go live in the directory.
+- The directory's Versions tab can hold approved-but-unpublished commits that
+  are **older** than what is serving — 8bafe24 and 346a8a7 sat there while
+  bd9f07e served. Publishing one of those would move the live version
+  backwards. The directory dates the serving row by the submission (Aug 8),
+  not by its commit (Sep 23), so its banner "A newer version passed its checks"
+  points at the older commits. Check the SHA against `git log` before using
+  "Publish update", never the date the directory shows.
+- The directory's own validation flags findings in files it scans but the
+  plugin never runs: `tests/run_tests.py` for credential use (it passes
+  `os.environ` to a subprocess) and for download-and-run, and
+  `hooks/classifiers.json` and `docs/hard-enforcement.md` for download-and-run
+  (the `curl | sh` patterns LORM *blocks*). These are false positives. The
+  credential finding against `plugin.json` has no identified cause: the file
+  declares no MCP server and no environment variable.
+
+Users also install via `/plugin marketplace add Argyronix/lorm` →
 `/plugin install lorm@argyronix-lorm`. A **new** install takes the current
 state of `main`, so pushing to `main` is what reaches new users. An
 **existing** install does not: `plugin.json` sets an explicit `version`,
