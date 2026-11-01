@@ -3,6 +3,57 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
+## 2.8.0 — unreleased
+
+The enforcement hook no longer grants permission. Behavior change for L5;
+`deny` and `ask` are unchanged.
+
+### Changed
+- A call covered by a valid L5 entry now gets **no output** from the
+  PreToolUse hook instead of `permissionDecision: "allow"`. Claude Code's
+  normal permission flow decides whether it runs: a matching
+  `permissions.allow` rule, a permission mode, or the user's approval in the
+  dialog. Every L5 check (expiry, demotions, targets, rate limit,
+  conditions) still runs, and any failed check still degrades the call to
+  `ask`. The internal verdict is renamed from `allow` to `pass`, and the gate
+  refuses to print anything but `deny` or `ask`.
+- Reason: the Claude plugin directory holds any version whose hook can
+  approve tool calls or change their input. 2.7.3 was held on that finding
+  (`hooks/hooks.json · PreToolUse`), while 2.7.2, which has the same hook
+  code, kept serving. The rule also matches the model: authority has two
+  sources, a human decision and a written policy, and a plugin that grants
+  permissions on its own is neither.
+- L5 execution records keep `authorizer: policy:<id>@<version>` and add
+  `x-granted-by: host-permission-flow`, because the hook can no longer see
+  how the call was let through.
+- To run an L5 capability without a dialog, add a matching Claude Code
+  `permissions.allow` rule. See `docs/hard-enforcement.md` §"The hook never
+  grants permission".
+
+### Added
+- `LORM_TRACE=1` writes the gate's internal decision (`pass`, `ask`,
+  `deny`, with the reason) to stderr. Stdout is unchanged.
+- Tests: valid L5 produces empty stdout with and without the trace; L5
+  records carry `x-granted-by`, L4 records do not; and a suite-wide
+  invariant fails if the gate printed anything but `deny` or `ask` in any
+  case; an unexpected internal verdict fails closed to `ask`. 129 tests
+  (8 new).
+
+### Fixed
+- `schema/examples/full.lorm-policy.yaml` expiry dates moved to 2027. The
+  example's L5 entries had expired on 2026-10-01, so the README's
+  "copied from a run" table no longer matched a real run.
+
+### Notes
+- No schema change; `SPEC.md` unchanged. Policies valid under 2.7.x stay
+  valid.
+- Checked live on Claude Code 2.1.316: a valid L5 call with no allow rule
+  shows Claude Code's usual dialog; with a matching `permissions.allow`
+  rule it runs without one; and an out-of-targets call still shows the
+  LORM dialog despite the rule. The procedure is now in
+  `docs/hard-enforcement.md` §Testing, replacing a smoke test that expected
+  L5 to run without a prompt.
+
 ## 2.7.3 — 2026-09-30
 
 No engine change. The release adds an icon and records where the plugin does

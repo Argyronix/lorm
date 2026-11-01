@@ -1,8 +1,8 @@
 {
   "name": "lorm",
   "displayName": "LORM — Layered Operational Responsibility Model",
-  "version": "2.7.3",
-  "description": "Authorization gate and audit trail for agent actions: what a written policy grants runs, what it does not requires approval, what it forbids is denied.",
+  "version": "2.8.0",
+  "description": "Authorization gate and audit trail for agent actions: what a written policy forbids is denied, what it reserves for a human requires approval, and every gated action is recorded. The hook never grants permission itself.",
   "icon": "./assets/icon.png",
   "author": {
     "name": "Argyronix",
