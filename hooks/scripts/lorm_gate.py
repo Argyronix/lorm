@@ -5,11 +5,16 @@ Usage (wired via hooks/hooks.json):
     python3 lorm_gate.py pre     # PreToolUse: authorization decision
     python3 lorm_gate.py post    # PostToolUse: audit record append
 
-Reads the hook payload as JSON on stdin. Emits, when it has an opinion:
+Reads the hook payload as JSON on stdin. Emits, when it objects:
     {"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                            "permissionDecision": "allow|deny|ask",
+                            "permissionDecision": "deny|ask",
                             "permissionDecisionReason": "..."}}
-Exit 0 with no output = no opinion (normal Claude Code permission flow).
+Exit 0 with no output = no objection (normal Claude Code permission flow).
+
+The hook never grants permission. A call covered by a valid L5 entry gets
+no output, and Claude Code's own permission flow decides whether it runs
+(since 2.8.0; earlier versions emitted "allow"). The hook can only restrict.
+Set LORM_TRACE=1 to write the internal decision to stderr.
 
 Design contract: docs/hard-enforcement.md in the LORM repository.
 Fail posture: any internal error in `pre` degrades to "ask" with the error
@@ -49,7 +54,10 @@ DESTRUCTIVE_FILE_COMMANDS = {"rm", "mv", "shred", "truncate", "sed", "tee", "cp"
 RATE_WINDOW_SECONDS = 3600
 CONDITION_TIMEOUT_DEFAULT = 5
 CONDITIONS_BUDGET_SECONDS = 8.0  # keep total below the 10s hook timeout
-SEVERITY = {"deny": 3, "ask": 2, "allow": 1}
+# "pass" is internal only: a valid L5 entry covers the call and LORM has no
+# objection. It is never emitted as a permission decision (see emit()).
+SEVERITY = {"deny": 3, "ask": 2, "pass": 1}
+EMITTED_DECISIONS = ("deny", "ask")
 LEVELS = ("L0", "L1", "L2", "L3", "L4", "L5")
 
 
@@ -638,13 +646,13 @@ def decide_for_capability(cap, policy, tool, tool_input, cap_segments,
         cond_note = ""
 
     pol = cap.get("policy") or {}
-    return ("allow",
-            f"LORM: authorized by policy `{cid}` v{pol.get('version', '?')} "
+    return ("pass",
+            f"LORM: within policy `{cid}` v{pol.get('version', '?')} "
             f"(expires {pol.get('expires')}){rate_note}{cond_note}")
 
 
 def combine(decisions):
-    """Most restrictive wins: deny > ask > allow > none."""
+    """Most restrictive wins: deny > ask > pass > none."""
     best = None
     for decision in decisions:
         if decision is None:
@@ -1190,6 +1198,12 @@ def run_post(payload):
         "x-writer": "lorm-hook",
         "x-session": payload.get("session_id", ""),
     }
+    if level == "L5":
+        # The policy entry is the LORM authorization, but since 2.8.0 the hook
+        # does not grant the call itself: Claude Code's permission flow let it
+        # run (a permissions rule, a permission mode, or the user's approval
+        # in the dialog). The hook cannot tell which, so it says so.
+        record["x-granted-by"] = "host-permission-flow"
     if verify_detail:
         record["x-verified-by"] = "lorm-hook-mechanical"
         record["x-verify-detail"] = verify_detail[:200]
@@ -1217,6 +1231,19 @@ def emit(decision):
     if decision is None:
         return
     verdict, reason = decision
+    if os.environ.get("LORM_TRACE"):
+        print(json.dumps({"lorm_trace": {"decision": verdict,
+                                         "reason": reason}}),
+              file=sys.stderr)
+    if verdict == "pass":
+        # No output, so Claude Code's normal permission flow decides.
+        # The hook restricts; it never grants.
+        return
+    if verdict not in EMITTED_DECISIONS:
+        # An engine bug. Fail closed to a human, never open.
+        verdict, reason = ("ask", f"LORM hook error: unexpected internal "
+                                  f"decision {verdict!r} — degrading to human "
+                                  f"approval")
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",

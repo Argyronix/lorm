@@ -87,7 +87,7 @@ capabilities:
       author: "alice@acme.example"
       approved_by: "bob@acme.example"
       approved_at: 2026-07-01
-      expires: 2026-10-01
+      expires: 2027-10-01
       tested: "canary run 2026-06-30, 20 writes, 0 rollbacks"
     bounds:
       targets: ["/srv/acme/notes/**"]   # absolute glob, hook-verified
@@ -112,7 +112,7 @@ capabilities:
       author: "alice@acme.example"
       approved_by: "bob@acme.example"   # must differ from author
       approved_at: 2026-07-01
-      expires: 2026-10-01               # mandatory; expired => treated as L4
+      expires: 2027-10-01               # mandatory; expired => treated as L4
       tested: "canary run 2026-06-28, 14 executions, 0 rollbacks"
     conditions:
       # executable check (schema 1.3): hook runs it; exit 0 = holds,
@@ -150,7 +150,7 @@ capabilities:
       author: "alice@acme.example"
       approved_by: "bob@acme.example"
       approved_at: 2026-07-01
-      expires: 2026-10-01
+      expires: 2027-10-01
       tested: "staging soak 2026-06-20..27, 40 executions, 0 failures"
     conditions:
       - "table statistics older than 7 days"
@@ -176,7 +176,7 @@ capabilities:
       author: "alice@acme.example"
       approved_by: "bob@acme.example"
       approved_at: 2026-05-15
-      expires: 2026-11-15
+      expires: 2027-11-15
       tested: "staging soak 2026-05-01..14, 122 executions, 0 failures"
     conditions:
       - "table statistics older than 7 days AND >10% rows changed"

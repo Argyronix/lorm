@@ -14,8 +14,8 @@ or policy snippet — the templates prompt for these.
 
 **Found a security issue** — specifically, anything that lets a gated action
 execute without the authorization LORM claims for it (e.g. an L4 action
-running without a prompt, or an expired/invalid L5 policy still granting
-`allow`) — do not open a public issue. See [`SECURITY.md`](SECURITY.md).
+running without a prompt, or an expired/invalid L5 policy entry not
+degrading to `ask`) — do not open a public issue. See [`SECURITY.md`](SECURITY.md).
 
 **General questions or discussion** aren't yet routed anywhere separate from
 Issues — if that becomes a bottleneck, GitHub Discussions is the natural next
