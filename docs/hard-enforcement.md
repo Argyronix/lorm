@@ -129,11 +129,14 @@ exactly as before, and any failed check still degrades the call to `ask`.
 What changed is who lets a valid call through without a prompt. That is
 now Claude Code's own permission configuration, written by the human. To
 run an L5 capability without a dialog, add a matching rule under
-`permissions.allow` in the project's Claude Code settings. LORM's `deny`
-and `ask` are designed to apply on top of such a rule, so a rule cannot
-widen what the policy bounds allow (rows 4–8). Without a matching rule, a
-valid L5 call shows Claude Code's usual dialog, which is the safe
-direction to fail.
+`permissions.allow` in the project's Claude Code settings. LORM's `ask`
+still applies on top of such a rule, so a rule cannot widen what the
+policy bounds allow (rows 4–8). Checked live on Claude Code 2.1.316: with
+`Bash(rm -f:*)` allowed, `rm -f notes.txt` outside `bounds.targets` still
+showed the LORM dialog. Without a matching rule, a valid L5 call shows
+Claude Code's usual dialog, which is the safe direction to fail. In auto
+mode, Claude Code's own classifier may approve a silent L5 call without a
+dialog; that is the host's decision, not LORM's.
 
 **Audit records.** An L5 execution record keeps
 `authorizer: policy:<id>@<version>` and adds
@@ -347,10 +350,25 @@ executed, a human approved it.
 ## Testing
 
 ```bash
-python3 tests/run_tests.py     # 104 assertions across ~16 scenario groups
+python3 tests/run_tests.py     # 129 assertions across 21 scenario groups
 ```
 
-Live smoke test: create a scratch project with a `defaults.unknown_action:
-refuse` policy, run `claude --plugin-dir /path/to/lorm -p "delete x.txt
-with rm"`, and confirm the deny reason in the output; switch to a valid L5
-policy entry matching the command and confirm it runs without a prompt.
+Live check (run before every release that touches the gate). Use a scratch
+project with an L5 entry such as `command_patterns: ["rm -f *"]` and
+`bounds.targets: ["tmp/*"]`, start
+`claude --plugin-dir /path/to/lorm --permission-mode default`, and confirm:
+
+1. `/hooks` lists exactly one LORM PreToolUse hook, from the plugin
+   directory. An installed copy of the plugin loads a second hook; turn it
+   off in the scratch project with `"enabledPlugins":
+   {"lorm@argyronix-lorm": false}` in `.claude/settings.json`.
+2. No `permissions.allow` rule: `rm -f tmp/a.txt` shows Claude Code's
+   usual dialog with no LORM text (the hook stayed silent).
+3. With `"permissions": {"allow": ["Bash(rm -f:*)"]}`: `rm -f tmp/a.txt`
+   runs without a dialog.
+4. Same rule: `rm -f notes.txt` shows the LORM dialog naming
+   `bounds.targets` (the hook's `ask` overrides the allow rule).
+5. Each execution in steps 2–3 appends an L5 record with
+   `x-granted-by: host-permission-flow`.
+
+Last run: 2026-11-01, Claude Code 2.1.316, all five as expected.

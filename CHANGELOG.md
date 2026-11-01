@@ -47,6 +47,12 @@ The enforcement hook no longer grants permission. Behavior change for L5;
 ### Notes
 - No schema change; `SPEC.md` unchanged. Policies valid under 2.7.x stay
   valid.
+- Checked live on Claude Code 2.1.316: a valid L5 call with no allow rule
+  shows Claude Code's usual dialog; with a matching `permissions.allow`
+  rule it runs without one; and an out-of-targets call still shows the
+  LORM dialog despite the rule. The procedure is now in
+  `docs/hard-enforcement.md` §Testing, replacing a smoke test that expected
+  L5 to run without a prompt.
 
 ## 2.7.3 — 2026-09-30
 
