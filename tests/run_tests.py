@@ -24,6 +24,25 @@ PASS, FAIL = 0, []
 
 # ------------------------------------------------------------------ harness
 
+# Variables a child process may inherit from the developer's environment.
+# PATH lets condition checks find commands such as `sleep`; HOME lets packages
+# installed with `pip --user` (PyYAML, jsonschema) import; LANG and LC_ALL keep
+# text decoding stable. Nothing else is passed on.
+INHERITED_ENV = ("PATH", "HOME", "LANG", "LC_ALL")
+
+
+def child_env(**extra):
+    """The environment for every subprocess the suite starts.
+
+    An explicit allowlist plus the variables a test sets, never a copy of the
+    developer's environment: a test suite has no reason to hand the developer's
+    tokens to the code under test, and the Claude plugin directory flags a
+    copied environment as "Uses a credential from the user's machine".
+    """
+    env = {key: os.environ[key] for key in INHERITED_ENV if key in os.environ}
+    env.update(extra)
+    return env
+
 
 EMITTED = []  # every permissionDecision the gate printed, for the invariant
 
@@ -41,10 +60,8 @@ def run_gate(mode, payload, project, extra_env=None):
     """Returns the gate's internal decision. A silent "pass" (valid L5, no
     output) is read from the LORM_TRACE line on stderr; anything printed on
     stdout is recorded so the suite can assert it is only ever deny/ask."""
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=project, CLAUDE_PLUGIN_ROOT=REPO,
-               LORM_TRACE="1")
-    if extra_env:
-        env.update(extra_env)
+    env = child_env(CLAUDE_PROJECT_DIR=project, CLAUDE_PLUGIN_ROOT=REPO,
+                    LORM_TRACE="1", **(extra_env or {}))
     proc = subprocess.run(
         [sys.executable, GATE, mode],
         input=json.dumps(payload), capture_output=True, text=True, env=env,
@@ -62,9 +79,8 @@ def run_gate(mode, payload, project, extra_env=None):
 
 def run_gate_post(payload, project, extra_env=None):
     """Post-mode runner: returns (returncode, systemMessage_or_None, stderr)."""
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=project, CLAUDE_PLUGIN_ROOT=REPO)
-    if extra_env:
-        env.update(extra_env)
+    env = child_env(CLAUDE_PROJECT_DIR=project, CLAUDE_PLUGIN_ROOT=REPO,
+                    **(extra_env or {}))
     proc = subprocess.run(
         [sys.executable, GATE, "post"],
         input=json.dumps(payload), capture_output=True, text=True, env=env,
@@ -89,8 +105,7 @@ def write_payload(file_path, project, cwd=None, tool="Write"):
 
 
 def make_project(policy_yaml=None, policy_name="lorm-policy.yaml"):
-    project = tempfile.mkdtemp(prefix="lorm-test-",
-                               dir=os.environ.get("TMPDIR") or None)
+    project = tempfile.mkdtemp(prefix="lorm-test-")  # honors $TMPDIR itself
     os.makedirs(os.path.join(project, "build"), exist_ok=True)
     open(os.path.join(project, "build", "a.o"), "w").write("obj")
     open(os.path.join(project, "data.txt"), "w").write("data")
@@ -657,7 +672,7 @@ VALIDATOR = os.path.join(REPO, "skills", "lorm", "scripts", "validate_policy.py"
 def run_review(project, *extra):
     proc = subprocess.run(
         [sys.executable, REVIEW, project, "--json", *extra],
-        capture_output=True, text=True, timeout=30)
+        capture_output=True, text=True, env=child_env(), timeout=30)
     return json.loads(proc.stdout) if proc.stdout.strip() else {}
 
 
@@ -781,8 +796,7 @@ def test_validator_environment():
     open(os.path.join(fake_modules, "jsonschema.py"), "w").write(
         "# Deliberately models jsonschema 3.x: no Draft202012Validator.\n"
     )
-    env = dict(os.environ)
-    env["PYTHONPATH"] = fake_modules + os.pathsep + env.get("PYTHONPATH", "")
+    env = child_env(PYTHONPATH=fake_modules)
     proc = subprocess.run(
         [sys.executable, VALIDATOR, os.path.join(project, "lorm-policy.yaml")],
         capture_output=True, text=True, env=env, timeout=30,
@@ -1123,7 +1137,7 @@ def seed_observations(project, rows):
 def run_discover(project, *extra):
     proc = subprocess.run(
         [sys.executable, DISCOVER, project, "--json", *extra],
-        capture_output=True, text=True, timeout=30)
+        capture_output=True, text=True, env=child_env(), timeout=30)
     if proc.returncode != 0:
         return None, proc.stderr
     return json.loads(proc.stdout), proc.stderr
@@ -1271,10 +1285,8 @@ def test_never_grants():
     print("hook never grants permission")
     p = make_project(BASE_L5)
     for trace in (None, "1"):
-        env = dict(os.environ, CLAUDE_PROJECT_DIR=p, CLAUDE_PLUGIN_ROOT=REPO)
-        env.pop("LORM_TRACE", None)
-        if trace:
-            env["LORM_TRACE"] = trace
+        env = child_env(CLAUDE_PROJECT_DIR=p, CLAUDE_PLUGIN_ROOT=REPO,
+                        **({"LORM_TRACE": trace} if trace else {}))
         proc = subprocess.run(
             [sys.executable, GATE, "pre"],
             input=json.dumps(bash_payload("rm -rf build", p)),
@@ -1293,12 +1305,30 @@ def test_never_grants():
             f"sys.path.insert(0, {os.path.dirname(GATE)!r}); "
             "import lorm_gate; lorm_gate.emit(('allow', 'x'))")
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                          text=True, timeout=30)
+                          text=True, env=child_env(), timeout=30)
     out = json.loads(proc.stdout)["hookSpecificOutput"] if proc.stdout.strip() else {}
     check("unexpected internal verdict -> ask (fail-closed)",
           out.get("permissionDecision") == "ask"
           and "unexpected internal decision" in out.get("permissionDecisionReason", ""),
           repr(proc.stdout) + proc.stderr)
+
+
+def test_child_env():
+    """Subprocesses get an allowlisted environment, never a copy of the
+    developer's: a variable outside INHERITED_ENV must not reach the child."""
+    print("child processes do not inherit the developer's environment")
+    os.environ["LORM_TEST_SECRET"] = "must-not-leak"
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c",
+             "import os; print('LORM_TEST_SECRET' in os.environ)"],
+            capture_output=True, text=True, env=child_env(), timeout=30)
+    finally:
+        del os.environ["LORM_TEST_SECRET"]
+    check("variable outside the allowlist does not reach a child",
+          proc.stdout.strip() == "False", repr(proc.stdout) + proc.stderr)
+    check("allowlist is passed through",
+          set(child_env()) <= set(INHERITED_ENV), str(sorted(child_env())))
 
 
 def test_emitted_invariant():
@@ -1320,7 +1350,7 @@ def main():
                test_review, test_validator_environment, test_multi_cap,
                test_mechanical_verification,
                test_observations, test_discover, test_outside_project_match,
-               test_emitted_invariant):
+               test_child_env, test_emitted_invariant):
         fn()
     print(f"\n{PASS} passed, {len(FAIL)} failed")
     if FAIL:
