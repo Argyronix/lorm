@@ -216,9 +216,10 @@ yet:
 **`main` is what the Claude plugin directory serves to strangers.** The plugin
 has been live there since 2026-09-23 (submitted Aug 8, security scan Sep 23,
 published by a reviewer). The directory reads this repository's default
-branch and rescans it about every six hours (no push webhook is set up). Each
-new commit that passes the directory's checks appears on the Versions tab as a
-candidate.
+branch. As of 2026-11-14 the Overview tab says "Claude GitHub App connected ·
+pushes are picked up in minutes", and the directory also checks on a schedule;
+"Check for new commits" asks for a check right away. Each new commit appears on
+the Versions tab with its result, whether or not it passes.
 
 Settings as of 2026-09-30, set by a maintainer in the directory's Settings tab:
 
@@ -230,7 +231,11 @@ Settings as of 2026-09-30, set by a maintainer in the directory's Settings tab:
 - **Listed on Claude Code only.** Cowork and Claude apps were unchecked, because
   the hard layer is passive there (see `docs/hard-enforcement.md` §"Where the
   hook looks for the policy"). Do not use "List everywhere it works": it adds
-  those surfaces back.
+  those surfaces back. **As of 2026-11-14 the directory lists the plugin on all
+  three surfaces anyway:** the saved selection is still Claude Code only, and
+  the Settings tab says "Listed now, though the saved selection leaves it out"
+  for Cowork and Claude apps. Nobody here changed it. Raised with Anthropic on
+  2026-11-14.
 - "This plugin collects or transmits user data" is off, which matches
   `PRIVACY.md`.
 
@@ -241,6 +246,41 @@ reason, which is not verified: without a policy file the plugin does nothing
 visible, so an install with no policy looks the same as no install. Count
 installs as reach, never as adoption. The Directory funnel table shows 0
 listing views next to 72 installs from the plugin page, so do not rely on it.
+Through 2026-11-12 the picture is the same at a larger scale: 472 installs,
+**2 active accounts and 2 uses** (on 2026-10-30: 313 installer accounts and
+11,482 sessions that loaded the plugin). Who the 2 active accounts are is not
+known.
+
+**Directory status as of 2026-11-14: no new version can go live.**
+
+- v2.8.0 (`284c711`) fails directory policy with two blocking findings:
+  "Hooks of type command accepted only from Verified organizations" and "Files
+  outside the allowed types accepted only from Verified organizations". The
+  portal explains: "Verified means Anthropic knows your organization is a real
+  company. It is about who you are, not a test of your plugins." The Argyronix
+  organization is not Verified. LORM is a command hook plus Python scripts, so
+  every version fails this rule until the organization is Verified; the only
+  build that could pass unverified is the skill alone, without the hard layer.
+  The plugin documentation on claude.com does not describe this rule or how an
+  organization becomes Verified (checked 2026-11-14).
+- Since 2026-11-04 the directory marks the live v2.7.2 as "no longer meets
+  directory policy". It keeps serving. The rule it names is "Uses a credential
+  from the user's machine".
+- The 2.7.3 hold ("Hook can approve tool calls or change their input") was the
+  `allow` path; 2.8.0 removed it and was checked live. The finding is still
+  listed on `284c711`, as a warning, although the hook can no longer approve.
+  It appears to follow from having a PreToolUse command hook at all; that is an
+  inference, not something the portal states.
+- Held or failed candidates never go live: auto-publish is off and an Anthropic
+  reviewer publishes each version. So pushing to `main` does not need to wait
+  for the directory.
+- Contact: the plugin's menu → "Contact Anthropic" opens an email to
+  `directory@anthropic.com`. An email covering verification, the listed
+  surfaces and the credential findings was sent that way on 2026-11-14. The
+  contact email saved on the Settings tab is `edwardfish@argyronix.com`, so
+  watch that inbox (and its junk folder) for replies, not only the address
+  the email went out from. The earlier tickets #140316768 (2026-10-01) and
+  #143057493 (2026-10-08) were never answered.
 
 Until late September, a bad commit on `main` cost us a bad commit on `main`.
 Now, once it is published, it reaches people who never asked us for anything.
@@ -259,12 +299,16 @@ Consequences worth naming rather than rediscovering:
   points at the older commits. Check the SHA against `git log` before using
   "Publish update", never the date the directory shows.
 - The directory's own validation flags findings in files it scans but the
-  plugin never runs: `tests/run_tests.py` for credential use (it passes
-  `os.environ` to a subprocess) and for download-and-run, and
+  plugin never runs: `tests/run_tests.py` for download-and-run, and
   `hooks/classifiers.json` and `docs/hard-enforcement.md` for download-and-run
   (the `curl | sh` patterns LORM *blocks*). These are false positives. The
-  credential finding against `plugin.json` has no identified cause: the file
-  declares no MCP server and no environment variable.
+  credential finding against `tests/run_tests.py` was real in substance: the
+  suite copied the developer's whole environment into subprocesses. Since #9
+  (2026-11-14) every subprocess gets `child_env()`, an allowlist, and a test
+  keeps it that way; do not reintroduce `dict(os.environ, ...)` there. The
+  credential finding against `plugin.json` still has no identified cause: the
+  file declares no MCP server and no environment variable. Asked of Anthropic
+  on 2026-11-14.
 
 Users also install via `/plugin marketplace add Argyronix/lorm` →
 `/plugin install lorm@argyronix-lorm`. A **new** install takes the current
