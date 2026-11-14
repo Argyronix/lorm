@@ -3,7 +3,7 @@
 The LORM specification follows semantic versioning. The policy schema version
 (`lorm_policy` field) is versioned independently of the specification.
 
-## 2.8.0 — unreleased
+## 2.8.0 — 2026-11-14
 
 The enforcement hook no longer grants permission. Behavior change for L5;
 `deny` and `ask` are unchanged.
