@@ -32,8 +32,8 @@ What the spec, docs, or a previous version led you to expect instead.
 **Relevant policy** (if the bug involves gating/authorization)
 Paste the minimal `lorm-policy.yaml` snippet that reproduces it (redact anything sensitive).
 
-**Relevant audit record** (if the bug involves hook allow/ask/deny decisions)
-Paste the matching line(s) from `.lorm/audit.jsonl` (redact anything sensitive). If the hook made a decision you didn't expect, please include which one it returned (allow / ask / deny) and what you expected instead.
+**Relevant audit record** (if the bug involves hook ask/deny decisions, or the hook staying silent)
+Paste the matching line(s) from `.lorm/audit.jsonl` (redact anything sensitive). If the hook made a decision you didn't expect, please include which one it returned (silent / ask / deny; set `LORM_TRACE=1` to see the internal decision) and what you expected instead.
 
 **Anything else**
 Logs, screenshots, related issues.

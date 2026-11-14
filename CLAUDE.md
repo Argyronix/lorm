@@ -69,9 +69,14 @@ runtime, which the runner then forces onto the new one, warning once per job.
   "auto-apply" conveniences.
 - **Fail-closed, never crash-open.** Engine errors in the pre path emit
   `ask` with the error; the post path never blocks a completed call.
-- **Deny > ask > allow > silence.** Silence hands the call to Claude
-  Code's normal permission flow — that is the designed fallback, not a
-  bug. The plugin is passive in projects without a policy file.
+- **Deny > ask > silence; the hook never grants (since 2.8.0).** Silence
+  hands the call to Claude Code's normal permission flow — that is the
+  designed fallback, not a bug, and it is also what a valid L5 call gets
+  (internally `pass`). Never emit `allow` or `updatedInput`: the plugin
+  directory holds any version whose hook can approve a call or change its
+  input (2.7.3 was held for it), and `test_emitted_invariant` fails the
+  suite if the gate prints anything but `deny`/`ask`. The plugin is
+  passive in projects without a policy file.
 - **Per-segment Bash evaluation.** Capabilities and classifiers are
   evaluated per shell segment so an allowed segment can't smuggle a
   dangerous sibling (`rm -rf build && rm -rf /`). Don't "optimize" this
@@ -98,7 +103,7 @@ runtime, which the runner then forces onto the new one, warning once per job.
 - Version discipline: bump `.claude-plugin/plugin.json` and add a
   CHANGELOG entry together; spec (SPEC.md) is versioned separately
   (semver, currently 2.0.2) from the plugin. Three version lines exist and
-  drift apart easily — plugin (`plugin.json`, currently 2.7.3), spec
+  drift apart easily — plugin (`plugin.json`, currently 2.8.0), spec
   (`SPEC.md`), policy schema (`lorm_policy`) — so when one changes, check
   what README.md's "Status and roadmap" claims about all three.
 - Engine code: stdlib-only; PyYAML imported lazily and only for YAML

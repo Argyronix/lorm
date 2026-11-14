@@ -93,17 +93,22 @@ the gate returns — copied from a run, not paraphrased:
 
 | Action | Decision | Reason returned by the gate |
 | --- | :-: | --- |
-| `redis-cli -h session-cache FLUSHDB` | `allow` | authorized by policy `cache.flush` v3 (expires 2026-10-01); rate 0/2 this hour; 1 condition check(s) passed, 1 condition(s) remain agent-verified |
+| `redis-cli -h session-cache FLUSHDB` | silent (`pass`) | within policy `cache.flush` v3 (expires 2027-10-01); rate 0/2 this hour; 1 condition check(s) passed, 1 condition(s) remain agent-verified |
 | `psql -c "CREATE INDEX CONCURRENTLY …"` | `ask` | LORM L4: `db.index.create` requires per-action human authorization |
 | `psql -c "DROP INDEX idx_orders"` | `deny` | policy caps `db.index.drop` at L3 (listed as recommend-only); propose, don't execute (SPEC 2.5) |
 | `rm -rf build` | `ask` | unlisted `fs.delete`-class action (defaults.max_level=L3) — approving this dialog is the L4 human authorization (SPEC L4-1) |
 | `redis-cli -h session-cache FLUSHDB && rm -rf /` | `ask` | unlisted `fs.delete`-class action (defaults.max_level=L3) — approving this dialog is the L4 human authorization (SPEC L4-1) |
 
-`allow` runs without a prompt. `ask` becomes Claude Code's permission dialog — even
-in permissive modes, which is the point: an L4 action cannot be auto-approved away.
-`deny` blocks the call and tells the agent to propose instead.
+`ask` becomes Claude Code's permission dialog — even in permissive modes, which is
+the point: an L4 action cannot be auto-approved away. `deny` blocks the call and
+tells the agent to propose instead. A silent `pass` means the call is inside a valid
+L5 entry and LORM has no objection; Claude Code's own permission settings then
+decide whether it runs without a prompt. The hook never grants permission itself
+(since 2.8.0) — see
+[`docs/hard-enforcement.md`](docs/hard-enforcement.md#the-hook-never-grants-permission).
+The `pass` reason is printed only with `LORM_TRACE=1`.
 
-The last row is the per-segment rule: the first segment is granted at L5 on its own,
+The last row is the per-segment rule: the first segment is covered at L5 on its own,
 but the sibling is not, and the most restrictive decision wins — so an authorized
 command cannot smuggle an unauthorized one alongside it.
 
@@ -135,7 +140,9 @@ the L4 action, a named policy version for the L5 one. The first record was verif
 mechanically by the hook (schema 1.4 `verification.mechanical`); the second has no
 mechanical check declared, so it stays `pending` until verified — and a capability
 that accumulates executions with nothing verified is a stalled trust lifecycle, which
-`/lorm:lorm-review` reports on.
+`/lorm:lorm-review` reports on. Both records predate 2.8.0. Since then an L5 record
+also carries `"x-granted-by": "host-permission-flow"`: the policy is the LORM
+authorization, and Claude Code's permission flow is what let the call run.
 
 ## Design commitments
 
@@ -150,9 +157,9 @@ that accumulates executions with nothing verified is a stalled trust lifecycle, 
 
 ## Status and roadmap
 
-- Specification 2.0.2, the agent skill, and the enforcement plugin 2.7.3
+- Specification 2.0.2, the agent skill, and the enforcement plugin 2.8.0
   (PreToolUse gate + PostToolUse audit, policy schema 1.5):
-  **this repository, working and tested** — 121 tests, run in CI on Python
+  **this repository, working and tested** — 129 tests, run in CI on Python
   3.10 through 3.14. The engine needs the standard library and nothing else;
   PyYAML is required only to read YAML policy files, and CI proves a JSON
   policy is enforced without it. `validate_policy.py` additionally needs
@@ -175,7 +182,7 @@ release usually leaves both untouched.
   audit log and drafts promotion/demotion transitions for human decision —
   see [`docs/trust-lifecycle.md`](docs/trust-lifecycle.md).
 - Executable conditions since 2.4.0 (schema 1.3 `conditions[].check`) —
-  the L5 allow path is fully deterministic when policies use them.
+  the L5 path is fully deterministic when policies use them.
 - Mechanical verification since 2.5.0 (schema 1.4
   `verification.mechanical`): where a success criterion is checkable right
   after the call, the hook writes the audit record `verified` or `failed`
@@ -189,6 +196,9 @@ release usually leaves both untouched.
   `match.path_outside_project`): a path with no project-relative form can
   now be claimed by policy, which puts that class on the trust lifecycle
   like any other instead of leaving it permanently outside it.
+- The hook never grants permission since 2.8.0: a valid L5 call gets no
+  objection instead of `allow`, and Claude Code's own permission settings
+  decide whether it runs without a prompt. `deny` and `ask` are unchanged.
 - Next: project-level classifier extensions.
 
 The full version history is in [`CHANGELOG.md`](CHANGELOG.md). Design records

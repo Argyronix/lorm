@@ -7,8 +7,10 @@ The plugin wires two hooks around every `Bash`, `Write`, `Edit`, and MCP
 (`mcp__*`) tool call:
 
 - **PreToolUse** (`hooks/scripts/lorm_gate.py pre`) — the authorization
-  gate: `allow` what a valid L5 policy entry proves, force `ask` where LORM
-  demands a human, `deny` what the policy forbids.
+  gate: force `ask` where LORM demands a human, `deny` what the policy
+  forbids, and stay silent where a valid L5 policy entry covers the call.
+  The hook restricts; it never grants permission (see "The hook never
+  grants permission" below).
 - **PostToolUse** (`lorm_gate.py post`) — the audit writer: appends SPEC
   §10.3 execution records to the audit log that rate limits are counted
   against, and maintains the `.lorm/hook-active` marker for skill
@@ -86,16 +88,17 @@ have; treat writing checks with the same care as writing the policy.
 ## Decision table (PreToolUse)
 
 Combining rule when several segments/capabilities produce decisions:
-**deny > ask > allow > no-opinion.**
+**deny > ask > pass > no-opinion.** `pass` means a valid L5 entry covers
+the call. It is internal: `pass` and no-opinion both produce no output.
 
 | # | Condition | Output |
 |---|---|---|
 | 0 | no policy file | silent (passive) |
 | 1 | policy unreadable / parse error | `ask` — "policy present but unusable" |
 | 2 | `.yaml` policy and PyYAML missing | `ask` — install pyyaml or use `lorm-policy.json` |
-| P1 | Write/Edit/Bash-rewrite targeting the policy file | `ask` (overrides any allow) — SPEC I-8 |
+| P1 | Write/Edit/Bash-rewrite targeting the policy file | `ask` (overrides any `pass`) — SPEC I-8 |
 | P2 | truncate/delete/rewrite of the audit log (`>>` append exempt) | `deny` — SPEC I-6 |
-| 3 | matched L5, structurally valid, in targets, rate OK | **`allow`** citing policy id@version, expiry, rate n/max |
+| 3 | matched L5, structurally valid, in targets, rate OK | silent (`pass`) → normal permission flow. Reason (policy id@version, expiry, rate n/max) on stderr with `LORM_TRACE=1`. Before 2.8.0: `allow` |
 | 4 | matched L5, any check fails (expired, demoted, structural, rate, targets, corrupt log) | `ask` naming the failed check (SPEC 13-1) |
 | 5 | matched effective L4 | `ask` — fires even in acceptEdits/bypassPermissions modes |
 | 6 | matched effective ≤ L3 | `deny` — recommend-only |
@@ -103,6 +106,48 @@ Combining rule when several segments/capabilities produce decisions:
 | 8 | built-in classifier hit, `escalate` or unset | `ask` with the classifier id; approving the dialog is the L4 authorization |
 | 9 | nothing matched | silent → normal permission flow |
 | 10 | internal engine error | `ask` with the error (fail-closed, never crash-open) |
+
+## The hook never grants permission
+
+Since 2.8.0 the gate prints only `deny` or `ask`. It never prints `allow`,
+and it never changes a tool call's input. When a valid L5 entry covers a
+call, the hook stays silent and Claude Code's normal permission flow
+decides whether the call runs.
+
+**Why.** The Claude plugin directory holds any version whose hook can
+approve tool calls or change their input. Its stated remedy: a hook may
+deny a call, leave the decision to Claude Code's normal permission flow,
+or (in PreToolUse) ask the user. Versions up to 2.7.3 emitted `allow` for
+valid L5 calls, so 2.7.3 was held. The rule also fits this model: a
+third-party plugin that grants permissions is a source of authority the
+user did not write, and LORM recognizes exactly two sources — a human
+decision and a written policy.
+
+**What L5 means now.** The policy entry is still the LORM authorization:
+the hook checks expiry, demotions, targets, rate limits, and conditions
+exactly as before, and any failed check still degrades the call to `ask`.
+What changed is who lets a valid call through without a prompt. That is
+now Claude Code's own permission configuration, written by the human. To
+run an L5 capability without a dialog, add a matching rule under
+`permissions.allow` in the project's Claude Code settings. LORM's `ask`
+still applies on top of such a rule, so a rule cannot widen what the
+policy bounds allow (rows 4–8). Checked live on Claude Code 2.1.316: with
+`Bash(rm -f:*)` allowed, `rm -f notes.txt` outside `bounds.targets` still
+showed the LORM dialog. Without a matching rule, a valid L5 call shows
+Claude Code's usual dialog, which is the safe direction to fail. In auto
+mode, Claude Code's own classifier may approve a silent L5 call without a
+dialog; that is the host's decision, not LORM's.
+
+**Audit records.** An L5 execution record keeps
+`authorizer: policy:<id>@<version>` and adds
+`x-granted-by: host-permission-flow`. The hook cannot see whether the call
+passed through a permissions rule, a permission mode, or the user's
+approval in a dialog, so the record states where the grant came from
+instead of guessing which of the three it was.
+
+**Debugging.** With `LORM_TRACE=1` in the environment, the gate writes its
+internal decision (`pass`, `ask`, or `deny`, with the reason) to stderr as
+one JSON line. Stdout is unchanged.
 
 ## Matching semantics
 
@@ -204,7 +249,8 @@ an exhausted overall budget (8 s across all checks, inside the 10 s hook
 timeout) degrades the action to L4 with the condition named in the reason.
 Checks run only after the cheaper validity checks (expiry, demotion,
 targets, rate) have passed. Plain-string conditions remain the skill's
-duty and are noted as such in the `allow` reason.
+duty and are noted as such in the `pass` reason (visible with
+`LORM_TRACE=1`).
 
 ## Mechanical verification (schema 1.4)
 
@@ -304,10 +350,25 @@ executed, a human approved it.
 ## Testing
 
 ```bash
-python3 tests/run_tests.py     # 104 assertions across ~16 scenario groups
+python3 tests/run_tests.py     # 129 assertions across 21 scenario groups
 ```
 
-Live smoke test: create a scratch project with a `defaults.unknown_action:
-refuse` policy, run `claude --plugin-dir /path/to/lorm -p "delete x.txt
-with rm"`, and confirm the deny reason in the output; switch to a valid L5
-policy entry matching the command and confirm it runs without a prompt.
+Live check (run before every release that touches the gate). Use a scratch
+project with an L5 entry such as `command_patterns: ["rm -f *"]` and
+`bounds.targets: ["tmp/*"]`, start
+`claude --plugin-dir /path/to/lorm --permission-mode default`, and confirm:
+
+1. `/hooks` lists exactly one LORM PreToolUse hook, from the plugin
+   directory. An installed copy of the plugin loads a second hook; turn it
+   off in the scratch project with `"enabledPlugins":
+   {"lorm@argyronix-lorm": false}` in `.claude/settings.json`.
+2. No `permissions.allow` rule: `rm -f tmp/a.txt` shows Claude Code's
+   usual dialog with no LORM text (the hook stayed silent).
+3. With `"permissions": {"allow": ["Bash(rm -f:*)"]}`: `rm -f tmp/a.txt`
+   runs without a dialog.
+4. Same rule: `rm -f notes.txt` shows the LORM dialog naming
+   `bounds.targets` (the hook's `ask` overrides the allow rule).
+5. Each execution in steps 2–3 appends an L5 record with
+   `x-granted-by: host-permission-flow`.
+
+Last run: 2026-11-01, Claude Code 2.1.316, all five as expected.

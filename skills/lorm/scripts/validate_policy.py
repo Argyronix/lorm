@@ -17,7 +17,7 @@ cannot express:
   - warns when a demotion references an unknown capability id
   - match-block checks (schema 1.1): command_patterns require Bash in tools,
     path_patterns require Write/Edit; warns on L5 entries without match
-    (soft-only: the enforcement hook cannot grant allow) and on Bash-matched
+    (soft-only: the enforcement hook cannot check it at L5) and on Bash-matched
     L4/L5 entries whose bounds.targets are not hook-verifiable
 """
 
@@ -179,7 +179,7 @@ def semantic_checks(doc: dict) -> tuple[list[str], list[str]]:
         elif cap.get("level") == "L5":
             warnings.append(
                 f"capability {cid}: L5 entry without match block — soft-only "
-                f"(the enforcement hook cannot grant allow for it)"
+                f"(the enforcement hook cannot check it at L5)"
             )
 
     for dem in doc.get("demotions") or []:

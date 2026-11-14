@@ -25,8 +25,24 @@ PASS, FAIL = 0, []
 # ------------------------------------------------------------------ harness
 
 
+EMITTED = []  # every permissionDecision the gate printed, for the invariant
+
+
+def read_trace(stderr):
+    """The gate's LORM_TRACE line, or (None, "")."""
+    for line in (stderr or "").splitlines():
+        if line.startswith('{"lorm_trace"'):
+            trace = json.loads(line)["lorm_trace"]
+            return trace["decision"], trace["reason"]
+    return None, ""
+
+
 def run_gate(mode, payload, project, extra_env=None):
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=project, CLAUDE_PLUGIN_ROOT=REPO)
+    """Returns the gate's internal decision. A silent "pass" (valid L5, no
+    output) is read from the LORM_TRACE line on stderr; anything printed on
+    stdout is recorded so the suite can assert it is only ever deny/ask."""
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=project, CLAUDE_PLUGIN_ROOT=REPO,
+               LORM_TRACE="1")
     if extra_env:
         env.update(extra_env)
     proc = subprocess.run(
@@ -38,6 +54,9 @@ def run_gate(mode, payload, project, extra_env=None):
     if proc.stdout.strip():
         out = json.loads(proc.stdout)["hookSpecificOutput"]
         decision, reason = out["permissionDecision"], out["permissionDecisionReason"]
+        EMITTED.append(decision)
+    else:
+        decision, reason = read_trace(proc.stderr)
     return proc.returncode, decision, reason, proc.stderr
 
 
@@ -214,12 +233,12 @@ def test_passive():
     shutil.rmtree(p), shutil.rmtree(p2)
 
 
-def test_l5_allow_and_degrades():
-    print("L5 allow / degradations")
+def test_l5_pass_and_degrades():
+    print("L5 pass / degradations")
     p = make_project(BASE_L5)
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p), p)
-    check("valid L5 -> allow", d == "allow" and "fs.cleanup.build" in r, f"{d} {r}")
-    check("allow reason cites expiry & rate", FUTURE in r and "0/2" in r, r)
+    check("valid L5 -> pass", d == "pass" and "fs.cleanup.build" in r, f"{d} {r}")
+    check("pass reason cites expiry & rate", FUTURE in r and "0/2" in r, r)
 
     expired = BASE_L5.replace(f"expires: {FUTURE}", f"expires: {PAST}")
     p2 = make_project(expired)
@@ -257,7 +276,7 @@ def test_rate_limit():
     p2 = make_project(BASE_L5)
     audit_seed(p2, "fs.cleanup.build", 2, age_seconds=7200)
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p2), p2)
-    check("old records outside window -> allow", d == "allow", f"{d} {r}")
+    check("old records outside window -> pass", d == "pass", f"{d} {r}")
 
     p3 = make_project(BASE_L5)
     os.makedirs(os.path.join(p3, ".lorm"), exist_ok=True)
@@ -298,10 +317,10 @@ def test_compound_and_wrappers():
     print("compound commands / wrappers / parse fallback")
     p = make_project(BASE_L5)
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build && rm data.txt", p), p)
-    check("allowed segment + dangerous sibling -> ask (not allow)",
+    check("L5 segment + dangerous sibling -> ask (not pass)",
           d == "ask" and "fs.delete" in r, f"{d} {r}")
     rc, d, r, _ = run_gate("pre", bash_payload("echo start && rm -rf build", p), p)
-    check("benign + allowed segments -> allow", d == "allow", f"{d} {r}")
+    check("benign + L5 segments -> pass", d == "pass", f"{d} {r}")
     rc, d, r, _ = run_gate("pre", bash_payload("sudo rm data.txt", p), p)
     check("sudo wrapper stripped -> builtin ask", d == "ask", f"{d} {r}")
     rc, d, r, _ = run_gate("pre", bash_payload('rm data.txt "unbalanced', p), p)
@@ -316,12 +335,12 @@ def test_write_paths():
     print("Write/Edit path handling")
     p = make_project(WRITE_L5)
     rc, d, r, _ = run_gate("pre", write_payload(os.path.join(p, "build", "gen.js"), p), p)
-    check("Write inside targets -> allow", d == "allow", f"{d} {r}")
+    check("Write inside targets -> pass", d == "pass", f"{d} {r}")
     rc, d, r, _ = run_gate("pre", write_payload(os.path.join(p, "src.py"), p), p)
     check("Write outside targets -> ask", d == "ask" and "outside" in r, f"{d} {r}")
     rc, d, r, _ = run_gate("pre",
                            write_payload("build/rel.js", p, cwd=p), p)
-    check("relative path resolved vs cwd -> allow", d == "allow", f"{d} {r}")
+    check("relative path resolved vs cwd -> pass", d == "pass", f"{d} {r}")
 
     p2 = make_project(ESCALATE_DEFAULTS)
     outside = os.path.join(tempfile.gettempdir(), "lorm-escape.txt")
@@ -383,7 +402,7 @@ def test_fail_closed():
 
     p4 = make_project(BASE_L5.replace("metadata:", "x-extra: {a: 1}\nmetadata:"))
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p4), p4)
-    check("x- extension keys tolerated", d == "allow", f"{d} {r}")
+    check("x- extension keys tolerated", d == "pass", f"{d} {r}")
     for x in (p, p2, p3, p4):
         shutil.rmtree(x)
     shutil.rmtree(shim)
@@ -404,7 +423,7 @@ def test_hook_active_marker():
     rc, d, r, err = run_gate("pre", bash_payload("rm -rf build", p), p)
     check("marker exists after the pre call", os.path.exists(marker), err)
     check("marker precedes any audit record", not os.path.exists(audit), "")
-    check("pre decision unaffected", d == "allow", f"{d} {r}")
+    check("pre decision unaffected", d == "pass", f"{d} {r}")
 
     # A gated call the policy does not match still means the hook is live.
     p2 = make_project(BASE_L5)
@@ -436,6 +455,8 @@ def test_post_audit():
     check("record cites policy authorizer",
           rec["level"] == "L5" and rec["authorizer"].startswith("policy:fs.cleanup.build@"),
           str(rec))
+    check("L5 record says the host permission flow granted the call",
+          rec.get("x-granted-by") == "host-permission-flow", str(rec))
     check("marker file created",
           os.path.exists(os.path.join(p, ".lorm", "hook-active")), "")
     run_gate("post", payload, p)
@@ -450,6 +471,8 @@ def test_post_audit():
     rec2 = json.loads(open(audit2).read().splitlines()[0])
     check("human-approved builtin -> L4 record with session authorizer",
           rec2["level"] == "L4" and rec2["authorizer"].startswith("human:session"),
+          str(rec2))
+    check("L4 record carries no x-granted-by", "x-granted-by" not in rec2,
           str(rec2))
     payload = bash_payload("ls -la", p2)
     run_gate("post", payload, p2)
@@ -504,8 +527,8 @@ def test_mcp():
     p = make_project(MCP_L5)
     rc, d, r, _ = run_gate("pre", mcp_payload(
         "mcp__postgres__query", {"query": "ANALYZE prod.orders"}, p), p)
-    check("MCP valid L5 -> allow",
-          d == "allow" and "mcp.postgres.analyze" in r, f"{d} {r}")
+    check("MCP valid L5 -> pass",
+          d == "pass" and "mcp.postgres.analyze" in r, f"{d} {r}")
     rc, d, r, _ = run_gate("pre", mcp_payload(
         "mcp__postgres__query", {"query": "DROP TABLE prod.orders"}, p), p)
     check("MCP input pattern mismatch -> not the cap; read-verb query -> silent",
@@ -541,7 +564,7 @@ def test_mcp():
     p4 = make_project(numeric)
     rc, d, r, _ = run_gate("pre", mcp_payload(
         "mcp__postgres__query", {"limit": 10}, p4), p4)
-    check("MCP non-string input matched via JSON form", d == "allow", f"{d} {r}")
+    check("MCP non-string input matched via JSON form", d == "pass", f"{d} {r}")
 
     # post: audit record for MCP execution
     p5 = make_project(MCP_L5)
@@ -574,8 +597,8 @@ def test_executable_conditions():
         "        check: \"test -d build\"\n")
     p = make_project(passing)
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p), p)
-    check("passing check -> allow with check note",
-          d == "allow" and "1 condition check(s) passed" in r, f"{d} {r}")
+    check("passing check -> pass with check note",
+          d == "pass" and "1 condition check(s) passed" in r, f"{d} {r}")
 
     failing = with_conditions(
         "    conditions:\n"
@@ -603,8 +626,8 @@ def test_executable_conditions():
         "      - \"no other maintenance running\"\n")
     p4 = make_project(mixed)
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p4), p4)
-    check("mixed -> allow noting both kinds",
-          d == "allow" and "1 condition check(s) passed" in r
+    check("mixed -> pass noting both kinds",
+          d == "pass" and "1 condition check(s) passed" in r
           and "1 condition(s) remain agent-verified" in r, f"{d} {r}")
 
     soft_only = with_conditions(
@@ -612,8 +635,8 @@ def test_executable_conditions():
         "      - \"no other maintenance running\"\n")
     p5 = make_project(soft_only)
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p5), p5)
-    check("string-only conditions -> allow, agent-verified note",
-          d == "allow" and "agent-verified (soft)" in r, f"{d} {r}")
+    check("string-only conditions -> pass, agent-verified note",
+          d == "pass" and "agent-verified (soft)" in r, f"{d} {r}")
 
     env_check = with_conditions(
         "    conditions:\n"
@@ -622,7 +645,7 @@ def test_executable_conditions():
         " -a -n \\\"$LORM_ACTION\\\"\"\n")
     p6 = make_project(env_check)
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p6), p6)
-    check("check sees LORM_* env vars", d == "allow", f"{d} {r}")
+    check("check sees LORM_* env vars", d == "pass", f"{d} {r}")
     for x in (p, p2, p3, p4, p5, p6):
         shutil.rmtree(x)
 
@@ -800,7 +823,7 @@ def test_multi_cap():
     p2 = make_project(carveout)
     rc, d, r, _ = run_gate("pre", bash_payload("rm -rf build", p2), p2)
     check("narrow L5 beats broad L4 catch-all (specificity)",
-          d == "allow" and "fs.cleanup.build" in r, f"{d} {r}")
+          d == "pass" and "fs.cleanup.build" in r, f"{d} {r}")
     rc, d, r, _ = run_gate("pre", bash_payload("rm data.txt", p2), p2)
     check("outside the carve-out -> broad L4 still asks",
           d == "ask" and "fs.delete.docs" in r, f"{d} {r}")
@@ -1184,17 +1207,17 @@ audit:
   log: ".lorm/audit.jsonl"
   record_fields: [timestamp, capability, level, authorizer, action, params, diagnosis_ref, outcome, verified]
 """
-    # L5 flag entry, absolute targets: within scope -> allow, beyond -> degrade
+    # L5 flag entry, absolute targets: within scope -> pass, beyond -> degrade
     p = make_project(outside_l5)
     rc, d, r, _ = run_gate("pre", write_payload(target_in, p), p)
-    check("outside write within absolute targets -> allow",
-          d == "allow" and "fs.write.secondbrain" in r, f"{d} {r}")
+    check("outside write within absolute targets -> pass",
+          d == "pass" and "fs.write.secondbrain" in r, f"{d} {r}")
     rc, d, r, _ = run_gate("pre", write_payload(target_out, p), p)
     check("outside write beyond targets -> ask (degrade to L4)",
           d == "ask" and "outside" in r and "fs.write.secondbrain" in r, f"{d} {r}")
     rc, d, r, _ = run_gate("pre",
                            write_payload(target_in, p, tool="Edit"), p)
-    check("Edit also covered by the flag -> allow", d == "allow", f"{d} {r}")
+    check("Edit also covered by the flag -> pass", d == "pass", f"{d} {r}")
 
     # L4 / L3 flag entries gate as usual
     p2 = make_project(outside_l5.replace("level: L5", "level: L4"))
@@ -1240,15 +1263,64 @@ audit:
         os.remove(target_out)
 
 
+def test_never_grants():
+    """2.8.0: the hook never grants permission. A valid L5 call produces no
+    stdout at all, with or without LORM_TRACE, so Claude Code's own
+    permission flow decides. Required by the Claude plugin directory, whose
+    policy holds plugins whose hooks approve tool calls."""
+    print("hook never grants permission")
+    p = make_project(BASE_L5)
+    for trace in (None, "1"):
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=p, CLAUDE_PLUGIN_ROOT=REPO)
+        env.pop("LORM_TRACE", None)
+        if trace:
+            env["LORM_TRACE"] = trace
+        proc = subprocess.run(
+            [sys.executable, GATE, "pre"],
+            input=json.dumps(bash_payload("rm -rf build", p)),
+            capture_output=True, text=True, env=env, timeout=30)
+        label = "with" if trace else "without"
+        check(f"valid L5 -> no stdout ({label} LORM_TRACE)",
+              proc.returncode == 0 and proc.stdout == "",
+              repr(proc.stdout))
+        traced = read_trace(proc.stderr)[0]
+        check(f"trace on stderr only when asked ({label} LORM_TRACE)",
+              traced == ("pass" if trace else None), repr(proc.stderr))
+    shutil.rmtree(p)
+    # An unexpected internal verdict (an engine bug) fails closed to ask,
+    # never open and never as "allow".
+    code = ("import sys; sys.dont_write_bytecode = True; "
+            f"sys.path.insert(0, {os.path.dirname(GATE)!r}); "
+            "import lorm_gate; lorm_gate.emit(('allow', 'x'))")
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True,
+                          text=True, timeout=30)
+    out = json.loads(proc.stdout)["hookSpecificOutput"] if proc.stdout.strip() else {}
+    check("unexpected internal verdict -> ask (fail-closed)",
+          out.get("permissionDecision") == "ask"
+          and "unexpected internal decision" in out.get("permissionDecisionReason", ""),
+          repr(proc.stdout) + proc.stderr)
+
+
+def test_emitted_invariant():
+    """Runs last: across every pre-mode call the suite made, the gate printed
+    only deny or ask."""
+    print("invariant: emitted decisions")
+    bad = sorted(set(d for d in EMITTED if d not in ("deny", "ask")))
+    check("gate printed only deny/ask across the whole suite",
+          EMITTED and not bad, f"unexpected: {bad}, total {len(EMITTED)}")
+
+
 def main():
-    for fn in (test_passive, test_l5_allow_and_degrades, test_rate_limit,
+    for fn in (test_passive, test_l5_pass_and_degrades, test_never_grants,
+               test_rate_limit,
                test_l4_l3_and_defaults, test_compound_and_wrappers,
                test_write_paths, test_self_protection, test_fail_closed,
                test_hook_active_marker, test_post_audit, test_mcp,
                test_executable_conditions,
                test_review, test_validator_environment, test_multi_cap,
                test_mechanical_verification,
-               test_observations, test_discover, test_outside_project_match):
+               test_observations, test_discover, test_outside_project_match,
+               test_emitted_invariant):
         fn()
     print(f"\n{PASS} passed, {len(FAIL)} failed")
     if FAIL:

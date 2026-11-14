@@ -8,8 +8,10 @@ even for honest use are security issues and should be reported privately,
 not as a public issue. Examples:
 
 - An action classified below L4 executes without the expected prompt.
-- An expired, malformed, or otherwise invalid L5 policy entry still
-  produces `allow`.
+- An expired, malformed, or otherwise invalid L5 policy entry does not
+  degrade to `ask` (the hook stays silent instead).
+- The hook prints `allow` or changes a tool call's input. Since 2.8.0 it
+  only ever prints `deny` or `ask`.
 - The audit log (`.lorm/audit.jsonl`) can be truncated or overwritten
   despite the append-only guarantee (SPEC I-6).
 - A Bash command smuggles a denied sub-command past per-segment evaluation

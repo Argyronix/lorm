@@ -49,7 +49,7 @@ limit holds → degrade to L4 and report the log problem.
 
 Executing under a valid entry, announce authority first:
 
-> Executing under policy `cache.flush` v3 (expires 2026-10-01);
+> Executing under policy `cache.flush` v3 (expires 2027-10-01);
 > conditions verified: hit rate 12% for 22m; within bounds (1 object, 0/2
 > this hour).
 

@@ -68,9 +68,13 @@ if the code is good, so please raise an issue if you think one should change.
   writes its own permissions is neither.
 - **Fail closed, never crash open.** An engine error on the pre path emits
   `ask` carrying the error. The post path never blocks a call that already ran.
-- **Deny > ask > allow > silence.** Silence hands the call back to Claude
-  Code's normal permission flow. In a project with no policy file the hooks are
-  passive by design — that is the intended fallback, not a gap to close.
+- **Deny > ask > silence. The hook never grants.** Silence hands the call back
+  to Claude Code's normal permission flow; that includes a call covered by a
+  valid L5 entry (internally `pass`). Do not reintroduce `allow` or
+  `updatedInput`: the Claude plugin directory holds any version whose hook can
+  approve a tool call or change its input, and 2.7.3 was held for exactly that.
+  In a project with no policy file the hooks are passive by design — that is
+  the intended fallback, not a gap to close.
 - **Per-segment Bash evaluation.** Capabilities and classifiers are evaluated
   per shell segment, so an allowed segment cannot smuggle a dangerous sibling
   (`rm -rf build && rm -rf /`). Do not optimize this into whole-command
