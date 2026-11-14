@@ -262,7 +262,10 @@ known.
   every version fails this rule until the organization is Verified; the only
   build that could pass unverified is the skill alone, without the hard layer.
   The plugin documentation on claude.com does not describe this rule or how an
-  organization becomes Verified (checked 2026-11-14).
+  organization becomes Verified (checked 2026-11-14). The domain argyronix.com
+  was verified for the Claude organization on 2026-11-14 (Organization
+  settings → Domains); whether that counts toward organization verification
+  was not known when this was written.
 - Since 2026-11-04 the directory marks the live v2.7.2 as "no longer meets
   directory policy". It keeps serving. The rule it names is "Uses a credential
   from the user's machine".
@@ -302,13 +305,14 @@ Consequences worth naming rather than rediscovering:
   plugin never runs: `tests/run_tests.py` for download-and-run, and
   `hooks/classifiers.json` and `docs/hard-enforcement.md` for download-and-run
   (the `curl | sh` patterns LORM *blocks*). These are false positives. The
-  credential finding against `tests/run_tests.py` was real in substance: the
-  suite copied the developer's whole environment into subprocesses. Since #9
-  (2026-11-14) every subprocess gets `child_env()`, an allowlist, and a test
-  keeps it that way; do not reintroduce `dict(os.environ, ...)` there. The
-  credential finding against `plugin.json` still has no identified cause: the
-  file declares no MCP server and no environment variable. Asked of Anthropic
-  on 2026-11-14.
+  directory also reports "Uses a credential from the user's machine" on
+  `tests/run_tests.py`, on `.claude-plugin/plugin.json` and, since
+  2026-11-14, on this file. #9 (2026-11-14) gave every test subprocess an
+  explicit allowlist (`child_env()`), which is the better practice and stays,
+  but the finding remained on the next scan (`7919ef7`). What the scanner
+  reacts to is not known; `plugin.json` declares no MCP server and no
+  environment variable. Asked of Anthropic on 2026-11-14. Do not keep editing
+  files to guess at the scanner.
 
 Users also install via `/plugin marketplace add Argyronix/lorm` →
 `/plugin install lorm@argyronix-lorm`. A **new** install takes the current
